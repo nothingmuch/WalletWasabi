@@ -23,12 +23,12 @@ namespace WalletWasabi.Crypto.ZeroKnowledge
 				throw new InvalidOperationException($"Must provide exactly as many {NameofGenerators} as {NameofSecrets}. {NameofGenerators}: {generatorsCount}, {NameofSecrets}: {secretsCount}.");
 			}
 
-			var publicPointSanity = statement.PublicPoint;
+			var publicPointSanity = statement.PublicPoint.Negate();
 			foreach (var (secret, generator) in secrets.ZipForceEqualLength<Scalar, GroupElement>(generators))
 			{
 				Guard.False($"{nameof(secret)}.{nameof(secret.IsOverflow)}", secret.IsOverflow);
 				Guard.False($"{nameof(secret)}.{nameof(secret.IsZero)}", secret.IsZero);
-				publicPointSanity -= secret * generator;
+				publicPointSanity += secret * generator;
 			}
 
 			if (publicPointSanity != GroupElement.Infinity)

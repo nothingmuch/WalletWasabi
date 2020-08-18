@@ -20,22 +20,37 @@ namespace WalletWasabi.Crypto.ZeroKnowledge
 
 		public static KnowledgeOfRep CreateProof(KnowledgeOfRepParams parameters, WasabiRandom? random = null)
 		{
+			return CreateProof(new Transcript(), parameters, random);
+		}
+
+		public static KnowledgeOfRep CreateProof(Transcript transcript, KnowledgeOfRepParams parameters, WasabiRandom? random = null)
+		{
+			// before modifying anything, save a copy of the initial transcript state
+			// for the verification check below
+			var transcriptCopy = transcript.Clone();
+
+			var statement = parameters.Statement;
+			transcript.Statement(statement);
+
+			// TODO SPLIT HERE
+
 			var nonce = GroupElement.Infinity;
-			var randomScalars = new List<Scalar>();
-			foreach (var (secret, generator) in parameters.SecretGeneratorPairs)
+			var randomScalars = transcript.GenerateNonces(parameters.Secrets, random);
+			foreach (var (randomScalar, generator) in randomScalars.ZipForceEqualLength<Scalar, GroupElement>(parameters.Statement.Generators))
 			{
-				var randomScalar = GetNonZeroRandomScalar(random);
-				randomScalars.Add(randomScalar);
 				var randomPoint = randomScalar * generator;
 				nonce += randomPoint;
 			}
+			transcript.NonceCommitment(nonce);
 
-			var statement = parameters.Statement;
-			var challenge = Challenge.Build(nonce, statement);
+			// TODO SPLIT HERE
+
+			var challenge = transcript.GenerateChallenge();
 
 			var responses = new List<Scalar>();
 			foreach (var (secret, randomScalar) in parameters.Secrets.ZipForceEqualLength(randomScalars))
 			{
+				Guard.False("secret == randomScalar", secret == randomScalar);
 				var response = randomScalar + secret * challenge;
 				responses.Add(response);
 			}
@@ -43,41 +58,12 @@ namespace WalletWasabi.Crypto.ZeroKnowledge
 			var proof = new KnowledgeOfRep(nonce, responses);
 
 			// Sanity check:
-			if (!Verifier.Verify(proof, statement))
+			if (!Verifier.Verify(transcriptCopy, proof, statement))
 			{
 				throw new InvalidOperationException($"{nameof(CreateProof)} or {nameof(Verifier.Verify)} is incorrectly implemented. Proof was built, but verification failed.");
 			}
+
 			return proof;
-		}
-
-		private static Scalar GetNonZeroRandomScalar(WasabiRandom? random = null)
-		{
-			var disposeRandom = false;
-			if (random is null)
-			{
-				disposeRandom = true;
-				random = new SecureRandom();
-			}
-
-			try
-			{
-				var scalar = random.GetScalar(allowZero: false);
-
-				// Sanity checks:
-				if (scalar.IsOverflow || scalar.IsZero)
-				{
-					throw new InvalidOperationException("Bloody murder! Random generator served invalid scalar.");
-				}
-
-				return scalar;
-			}
-			finally
-			{
-				if (disposeRandom)
-				{
-					(random as IDisposable)?.Dispose();
-				}
-			}
 		}
 	}
 }

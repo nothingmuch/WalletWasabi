@@ -88,27 +88,39 @@ namespace WalletWasabi.Tests.UnitTests.Crypto.ZeroKnowledge
 		[Fact]
 		public void BuildChallenge()
 		{
+			// Mostly superseded by transcript tests, can be removed apart from test vectors
+			var mockRandom = new MockRandom();
+			mockRandom.GetBytesResults.Add(new byte[32]);
+			mockRandom.GetBytesResults.Add(new byte[32]);
+			mockRandom.GetBytesResults.Add(new byte[32]);
+
 			var point1 = new Scalar(3) * Generators.G;
 			var point2 = new Scalar(7) * Generators.G;
 			var generator = Generators.Ga;
 
 			var publicPoint = point1;
 			var nonce = Generators.G;
-			var statement = new Statement(publicPoint, generator);
-			var challenge = Challenge.Build(nonce, statement);
-			Assert.Equal("secp256k1_scalar  = { 0x8626D370UL, 0x6D18AF98UL, 0xAE71F87DUL, 0x5008741FUL, 0x43515E2BUL, 0x666194D8UL, 0x97CCA524UL, 0x09E82A30UL }", challenge.ToC(""));
+			var transcript = new Transcript();
+			transcript.Statement(new Statement(publicPoint, generator));
+			transcript.NonceCommitment(nonce);
+			var challenge = transcript.GenerateChallenge();
+			Assert.Equal("secp256k1_scalar  = { 0x76DE2CD1UL, 0x6B2058F6UL, 0x1AFCD67BUL, 0x6FA6F6D9UL, 0xE3616642UL, 0x2B7C7937UL, 0x2CEAC4FAUL, 0xADBD6816UL }", challenge.ToC(""));
 
 			publicPoint = Generators.G;
 			nonce = point2;
-			statement = new Statement(publicPoint, generator);
-			challenge = Challenge.Build(nonce, statement);
-			Assert.Equal("secp256k1_scalar  = { 0x72CF8E90UL, 0x518E892FUL, 0xA7046699UL, 0x0C21C88FUL, 0xEE3DC26EUL, 0x83F833FBUL, 0x0B21A692UL, 0x404C3D01UL }", challenge.ToC(""));
+			transcript = new Transcript();
+			transcript.Statement(new Statement(publicPoint, generator));
+			transcript.NonceCommitment(nonce);
+			challenge = transcript.GenerateChallenge();
+			Assert.Equal("secp256k1_scalar  = { 0xD5C21CC5UL, 0xDF25A2C4UL, 0x138537BEUL, 0xCAF4DB7FUL, 0x4A74E2F5UL, 0x4E38C5FEUL, 0x8DF3E37DUL, 0xC9009D2CUL }", challenge.ToC(""));
 
 			publicPoint = point1;
 			nonce = point2;
-			statement = new Statement(publicPoint, generator);
-			challenge = Challenge.Build(nonce, statement);
-			Assert.Equal("secp256k1_scalar  = { 0x333575CAUL, 0x7D400596UL, 0x4C12B718UL, 0xD64F97BBUL, 0x5EBB4EB7UL, 0x2D5DFD8EUL, 0xFB2FE4DCUL, 0x49FD37B6UL }", challenge.ToC(""));
+			transcript = new Transcript();
+			transcript.Statement(new Statement(publicPoint, generator));
+			transcript.NonceCommitment(nonce);
+			challenge = transcript.GenerateChallenge();
+			Assert.Equal("secp256k1_scalar  = { 0xBF46571BUL, 0x046ACBCBUL, 0xC374C02BUL, 0x23517B5AUL, 0x71CD44C8UL, 0xD15376F4UL, 0xB7785149UL, 0xCE2E541EUL }", challenge.ToC(""));
 		}
 
 		[Fact]

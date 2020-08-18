@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using WalletWasabi.Crypto.Groups;
+using WalletWasabi.Crypto.Randomness;
 using WalletWasabi.Crypto.ZeroKnowledge;
 using WalletWasabi.Tests.Helpers;
 using Xunit;
@@ -21,10 +22,24 @@ namespace WalletWasabi.Tests.UnitTests.Crypto.ZeroKnowledge
 			var generator = Generators.G;
 			var publicPoint = secret * generator;
 
-			Scalar randomScalar = new Scalar(14);
-			var nonce = randomScalar * generator;
 			var statement = new Statement(publicPoint, generator);
-			var challenge = Challenge.Build(nonce, statement);
+
+			var transcript = new Transcript();
+			transcript.Statement(statement);
+
+			var mockRandom = new MockRandom();
+			mockRandom.GetBytesResults.Add(new byte[32]);
+			var randomScalar = transcript.GenerateNonce(secret, mockRandom);
+
+			// synthetic nonce should still include a hash of the state
+			Assert.NotEqual(randomScalar, Scalar.Zero);
+			Assert.NotEqual(randomScalar, Scalar.One);
+			Assert.NotEqual(randomScalar, secret);
+
+			var nonce = randomScalar * generator;
+			transcript.NonceCommitment(nonce);
+
+			var challenge = transcript.GenerateChallenge();
 
 			var response = randomScalar + (secret + Scalar.One) * challenge;
 			var proof = new KnowledgeOfDlog(nonce, response);
