@@ -24,13 +24,14 @@ namespace WalletWasabi.Crypto.ZeroKnowledge
 
 			var nonce = GroupElement.Infinity;
 			var randomScalars = new List<Scalar>();
-			var publicPointSanity = publicPoint;
+			var publicPointSanity = publicPoint.Negate();
+
 			foreach (var (secret, generator) in secretGeneratorPairs)
 			{
 				Guard.False($"{nameof(secret)}.{nameof(secret.IsOverflow)}", secret.IsOverflow);
 				Guard.False($"{nameof(secret)}.{nameof(secret.IsZero)}", secret.IsZero);
 				Guard.False($"{nameof(generator)}.{nameof(generator.IsInfinity)}", generator.IsInfinity);
-				publicPointSanity -= secret * generator;
+				publicPointSanity += secret * generator;
 
 				var randomScalar = GetNonZeroRandomScalar(random);
 				randomScalars.Add(randomScalar);
