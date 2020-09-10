@@ -57,5 +57,18 @@ namespace WalletWasabi.Crypto.ZeroKnowledge
 
 		private static Statement LinearRelation(GroupElement publicPoint, GroupElementVector generators)
 			=> new Statement(new Equation(publicPoint, generators));
+
+		public static Verifier IssuerParameters(MAC mac, CoordinatorParameters iparams, GroupElement ma)
+		{
+			var O = GroupElement.Infinity;
+			return new Verifier(new Statement(new GroupElement[,]
+			{
+				// public                                             Witness terms:
+				// point                     w,             wp,             x0,             x1,             ya
+				{ mac.V,                     Generators.Gw, O,              mac.U,          mac.T * mac.U,  ma            },
+				{ Generators.GV - iparams.I, O,             O,              Generators.Gx0, Generators.Gx1, Generators.Ga },
+				{ iparams.Cw,                Generators.Gw, Generators.Gwp, O,              O,              O             },
+			}));
+		}
 	}
 }
