@@ -312,9 +312,6 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 					throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.AliceNotFound, $"Round ({request.RoundId}): Alice ({request.AliceId}) not found.");
 				}
 
-				var amountZeroCredentialResponse = round.AmountCredentialIssuer.HandleRequest(request.ZeroAmountCredentialRequests);
-				var weightZeroCredentialResponse = round.WeightCredentialIssuer.HandleRequest(request.ZeroWeightCredentialRequests);
-
 				var realAmountCredentialRequests = request.RealAmountCredentialRequests;
 				var realWeightCredentialRequests = request.RealWeightCredentialRequests;
 
@@ -327,24 +324,27 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 					throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.IncorrectRequestedAmountCredentials, $"Round ({request.RoundId}): Incorrect requested amount credentials.");
 				}
 
+				var commitAmountZeroCredentialResponse = round.AmountCredentialIssuer.PrepareRequest(request.ZeroAmountCredentialRequests);
+				var commitWeightZeroCredentialResponse = round.WeightCredentialIssuer.PrepareRequest(request.ZeroWeightCredentialRequests);
+
 				if (round.Phase == Phase.InputRegistration)
 				{
 					alice.SetDeadlineRelativeTo(round.ConnectionConfirmationTimeout);
 					return new(
-						amountZeroCredentialResponse,
-						weightZeroCredentialResponse);
+						commitAmountZeroCredentialResponse(),
+						commitWeightZeroCredentialResponse());
 				}
 				else if (round.Phase == Phase.ConnectionConfirmation)
 				{
-					var amountRealCredentialResponse = round.AmountCredentialIssuer.HandleRequest(realAmountCredentialRequests);
-					var weightRealCredentialResponse = round.WeightCredentialIssuer.HandleRequest(realWeightCredentialRequests);
+					var commitAmountRealCredentialResponse = round.AmountCredentialIssuer.PrepareRequest(realAmountCredentialRequests);
+					var commitWeightRealCredentialResponse = round.WeightCredentialIssuer.PrepareRequest(realWeightCredentialRequests);
 					alice.ConfirmedConnetion = true;
 
 					return new(
-						amountZeroCredentialResponse,
-						weightZeroCredentialResponse,
-						amountRealCredentialResponse,
-						weightRealCredentialResponse);
+						commitAmountZeroCredentialResponse(),
+						commitWeightZeroCredentialResponse(),
+						commitAmountRealCredentialResponse(),
+						commitWeightRealCredentialResponse());
 				}
 				else
 				{
@@ -397,14 +397,14 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 					throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.WrongPhase, $"Round ({request.RoundId}): Wrong phase ({round.Phase}).");
 				}
 
-				var amountCredentialResponse = round.AmountCredentialIssuer.HandleRequest(request.AmountCredentialRequests);
-				var weightCredentialResponse = round.WeightCredentialIssuer.HandleRequest(weightCredentialRequests);
+				var commitAmountCredentialResponse = round.AmountCredentialIssuer.PrepareRequest(request.AmountCredentialRequests);
+				var commitWeightCredentialResponse = round.WeightCredentialIssuer.PrepareRequest(weightCredentialRequests);
 
 				round.Bobs.Add(bob);
 
 				return new(
-					amountCredentialResponse,
-					weightCredentialResponse);
+					commitAmountCredentialResponse(),
+					commitWeightCredentialResponse());
 			}
 		}
 

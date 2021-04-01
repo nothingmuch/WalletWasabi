@@ -127,15 +127,15 @@ namespace WalletWasabi.WabiSabi.Backend.PostRequests
 				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.WrongPhase);
 			}
 
-			var amountCredentialResponse = round.AmountCredentialIssuer.HandleRequest(zeroAmountCredentialRequests);
-			var weightCredentialResponse = round.WeightCredentialIssuer.HandleRequest(zeroWeightCredentialRequests);
+			var commitAmountCredentialResponse = round.AmountCredentialIssuer.PrepareRequest(zeroAmountCredentialRequests);
+			var commitWeightCredentialResponse = round.WeightCredentialIssuer.PrepareRequest(zeroWeightCredentialRequests);
 
 			RemoveDuplicateAlices(rounds, alice);
 
 			alice.SetDeadlineRelativeTo(round.ConnectionConfirmationTimeout);
 			round.Alices.Add(alice);
 
-			return new(alice.Id, amountCredentialResponse, weightCredentialResponse);
+			return new(alice.Id, commitAmountCredentialResponse(), commitWeightCredentialResponse());
 		}
 
 		private static void RemoveDuplicateAlices(IDictionary<Guid, Round> rounds, Alice alice)
