@@ -405,6 +405,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 			var alice3 = WabiSabiFactory.CreateAlice();
 			alice3.ConfirmedConnetion = true;
 			round.Alices.Add(alice3);
+			round.CoinjoinState = round.CoinjoinState.AssertConstruction().AddInput(alice3.Coins.First());
 			await arena.TriggerAndWaitRoundAsync(TimeSpan.FromSeconds(21));
 			Assert.Equal(Phase.TransactionSigning, round.Phase);
 

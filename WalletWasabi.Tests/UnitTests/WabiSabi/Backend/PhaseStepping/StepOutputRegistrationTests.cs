@@ -199,7 +199,11 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 			{
 				var orresp = await arena.RegisterOutputAsync(orreq);
 			}
-			round.Alices.Add(WabiSabiFactory.CreateAlice(value: round.MinRegistrableAmount - Money.Satoshis(1)));
+
+			var extraAlice = WabiSabiFactory.CreateAlice(value: round.MinRegistrableAmount);
+			round.Alices.Add(extraAlice);
+			round.CoinjoinState = round.CoinjoinState.AssertConstruction().AddInput(extraAlice.Coins.First());
+
 			await arena.TriggerAndWaitRoundAsync(TimeSpan.FromSeconds(21));
 			Assert.Equal(Phase.TransactionSigning, round.Phase);
 			Assert.Equal(3, round.Coinjoin.Inputs.Count);

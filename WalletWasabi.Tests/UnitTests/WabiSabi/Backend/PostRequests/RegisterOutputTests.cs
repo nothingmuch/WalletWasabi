@@ -55,9 +55,10 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PostRequests
 		{
 			WabiSabiConfig cfg = new();
 			var round = WabiSabiFactory.CreateRound(cfg);
-			round.SetPhase(Phase.OutputRegistration);
 			using Arena arena = await WabiSabiFactory.CreateAndStartArenaAsync(cfg, round);
 			using Key key = new();
+
+			round.SetPhase(Phase.OutputRegistration);
 
 			var req = WabiSabiFactory.CreateOutputRegistrationRequest(round, key.PubKey.GetAddress(ScriptPubKeyType.Legacy, Network.Main).ScriptPubKey);
 			await using ArenaRequestHandler handler = new(cfg, new Prison(), arena, new MockRpcClient());
@@ -72,9 +73,10 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PostRequests
 		{
 			WabiSabiConfig cfg = new();
 			var round = WabiSabiFactory.CreateRound(cfg);
-			round.SetPhase(Phase.OutputRegistration);
 			using Arena arena = await WabiSabiFactory.CreateAndStartArenaAsync(cfg, round);
 			using Key key = new();
+
+			round.SetPhase(Phase.OutputRegistration);
 
 			var sha256Bounty = Script.FromHex("aa20000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f87");
 			var req = WabiSabiFactory.CreateOutputRegistrationRequest(round, sha256Bounty);

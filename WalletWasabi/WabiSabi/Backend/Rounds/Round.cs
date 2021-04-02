@@ -13,6 +13,7 @@ using WalletWasabi.WabiSabi.Backend.Models;
 using WalletWasabi.WabiSabi.Crypto;
 using WalletWasabi.WabiSabi.Crypto.CredentialRequesting;
 using WalletWasabi.WabiSabi.Models;
+using MP = WalletWasabi.WabiSabi.Models.MultipartyTransaction;
 
 namespace WalletWasabi.WabiSabi.Backend.Rounds
 {
@@ -27,10 +28,16 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 			AmountCredentialIssuerParameters = AmountCredentialIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters();
 			WeightCredentialIssuerParameters = WeightCredentialIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters();
 
-			Coinjoin = Transaction.Create(Network);
+			var allowedAmounts = new MoneyRange(roundParameters.MinRegistrableAmount, RoundParameters.MaxRegistrableAmount);
+			var txParams = new MP.Parameters(roundParameters.FeeRate, allowedAmounts, allowedAmounts, roundParameters.Network);
+			CoinjoinState = new MP.Construction(txParams);
 
 			Hash = new(HashHelpers.GenerateSha256Hash($"{Id}{MaxInputCountByAlice}{MinRegistrableAmount}{MaxRegistrableAmount}{RegistrableWeightCredentials}{AmountCredentialIssuerParameters}{WeightCredentialIssuerParameters}{FeeRate.SatoshiPerByte}"));
 		}
+
+		public MP.State CoinjoinState { get; set; }
+
+		public Transaction Coinjoin { get => CoinjoinState.AssertSigning().CreateTransaction(); }
 
 		public uint256 Hash { get; }
 		public Network Network => RoundParameters.Network;
@@ -57,7 +64,6 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 		public TimeSpan OutputRegistrationTimeout => RoundParameters.OutputRegistrationTimeout;
 		public TimeSpan TransactionSigningTimeout => RoundParameters.TransactionSigningTimeout;
 
-		public Transaction Coinjoin { get; }
 		private RoundParameters RoundParameters { get; }
 		public Phase Phase { get; private set; } = Phase.InputRegistration;
 		public DateTimeOffset InputRegistrationStart { get; } = DateTimeOffset.UtcNow;
@@ -120,5 +126,14 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 
 			return false;
 		}
+
+		public MP.Construction AddInput(Coin coin)
+			=> CoinjoinState.AssertConstruction().AddInput(coin);
+
+		public MP.Construction AddOutput(TxOut output)
+			=> CoinjoinState.AssertConstruction().AddOutput(output);
+
+		public MP.Signing AddWitness(int index, WitScript witness)
+			=> CoinjoinState.AssertSigning().AddWitness(index, witness);
 	}
 }

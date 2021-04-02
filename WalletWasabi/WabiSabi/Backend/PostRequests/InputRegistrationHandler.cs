@@ -78,6 +78,11 @@ namespace WalletWasabi.WabiSabi.Backend.PostRequests
 				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.RoundNotFound);
 			}
 
+			if (round.IsInputRegistrationEnded(config.MaxInputCountByRound, config.GetInputRegistrationTimeout(round)))
+			{
+				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.WrongPhase);
+			}
+
 			var alice = new Alice(coinRoundSignaturePairs);
 
 			var coins = alice.Coins;
@@ -108,23 +113,19 @@ namespace WalletWasabi.WabiSabi.Backend.PostRequests
 				inputWeightSum += coin.TxOut.ScriptPubKey.EstimateInputVsize() * 4;
 			}
 
-			if (inputValueSum < round.MinRegistrableAmount)
-			{
-				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.NotEnoughFunds);
-			}
-			if (inputValueSum > round.MaxRegistrableAmount)
-			{
-				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.TooMuchFunds);
-			}
-
 			if (inputWeightSum > round.RegistrableWeightCredentials)
 			{
 				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.TooMuchWeight);
 			}
 
-			if (round.IsInputRegistrationEnded(config.MaxInputCountByRound, config.GetInputRegistrationTimeout(round)))
+
+			// Compute but don't commit updated CoinJoin to round state, it will
+			// be re-calculated on input confirmation. This is computed it here
+			// for validation purposes.
+			var state = round.CoinjoinState.AssertConstruction();
+			foreach (var coin in alice.Coins)
 			{
-				throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.WrongPhase);
+				state = state.AddInput(coin);
 			}
 
 			var commitAmountCredentialResponse = round.AmountCredentialIssuer.PrepareRequest(zeroAmountCredentialRequests);
