@@ -41,6 +41,7 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 
 		public MP.State CoinjoinState { get; set; }
 
+		// TODO remove
 		public Transaction Coinjoin { get => CoinjoinState.AssertSigning().CreateTransaction(); }
 
 		public uint256 Hash { get; }
