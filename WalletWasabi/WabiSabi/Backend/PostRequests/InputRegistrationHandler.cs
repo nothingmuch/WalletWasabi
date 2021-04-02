@@ -53,6 +53,8 @@ namespace WalletWasabi.WabiSabi.Backend.PostRequests
 				{
 					throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.InputImmature);
 				}
+
+				// TODO remove (redundant with transaction model, needlessly restrictive)
 				if (!txOutResponse.TxOut.ScriptPubKey.IsScriptType(ScriptType.P2WPKH))
 				{
 					throw new WabiSabiProtocolException(WabiSabiProtocolErrorCode.ScriptNotAllowed);
