@@ -287,14 +287,7 @@ namespace WalletWasabi.Tests.Helpers
 				Array.Empty<long>(),
 				amClient.Credentials.Valuable);
 
-			try
-			{
-				weight ??= script.EstimateOutputVsize() * 4;
-			}
-			catch (NotImplementedException)
-			{
-				weight = 100;
-			}
+			weight ??= script.EstimateOutputVsize() * 4;
 
 			var (realWeightCredentialRequest, _) = weClient.CreateRequest(
 				new[] { startingWeightCredentialAmount - (long)weight },
