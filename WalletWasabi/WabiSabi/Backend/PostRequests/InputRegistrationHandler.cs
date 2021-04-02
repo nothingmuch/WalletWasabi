@@ -104,6 +104,7 @@ namespace WalletWasabi.WabiSabi.Backend.PostRequests
 				var coin = coinRoundSignaturePair.Key;
 				var signature = coinRoundSignaturePair.Value;
 
+				// TODO should ownership proof verification be part of the MultipartyTransaction model?
 				var coinJoinInputCommitmentData = new CoinJoinInputCommitmentData("CoinJoinCoordinatorIdentifier", round.Hash);
 				if (!OwnershipProof.VerifyCoinJoinInputProof(signature, coin.TxOut.ScriptPubKey, coinJoinInputCommitmentData))
 				{
