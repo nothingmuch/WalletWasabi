@@ -200,6 +200,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 				var orresp = await arena.RegisterOutputAsync(orreq);
 			}
 
+			// TODO the feerate will reduce this input's balance input to below the minimum output amount, allowing this test to pass, but this is arguably a bug
 			var extraAlice = WabiSabiFactory.CreateAlice(value: round.MinRegistrableAmount);
 			round.Alices.Add(extraAlice);
 			round.CoinjoinState = round.CoinjoinState.AssertConstruction().AddInput(extraAlice.Coins.First());

@@ -28,6 +28,10 @@ namespace WalletWasabi.WabiSabi.Backend.Rounds
 			AmountCredentialIssuerParameters = AmountCredentialIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters();
 			WeightCredentialIssuerParameters = WeightCredentialIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters();
 
+			// TODO allowed input and output amounts should differ by at least
+			// the cost of a single p2wpkh input and a single p2wpkh output,
+			// otherwise some registrable input balances can result in no output
+			// registrations.
 			var allowedAmounts = new MoneyRange(roundParameters.MinRegistrableAmount, RoundParameters.MaxRegistrableAmount);
 			var txParams = new MP.Parameters(roundParameters.FeeRate, allowedAmounts, allowedAmounts, roundParameters.Network);
 			CoinjoinState = new MP.Construction(txParams);
