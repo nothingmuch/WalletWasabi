@@ -16,7 +16,7 @@ namespace WalletWasabi.WabiSabi.Backend.Models
 		long CredentialAmount)
 	{
 		public int OutputVsize
-			=> Script.EstimateOutputVsize();
+			=> Script.GetOutputVsize();
 
 		public Money CalculateOutputAmount(FeeRate feeRate)
 			=> CredentialAmount - feeRate.GetFee(OutputVsize);

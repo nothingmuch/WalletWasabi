@@ -456,7 +456,7 @@ namespace NBitcoin
 			return sanityFee;
 		}
 
-		public static int EstimateOutputVsize(this Script script)
+		public static int GetOutputVsize(this Script script)
 			=> new TxOut(Money.Zero, script).GetSerializedSize();
 
 		public static int EstimateInputVsize(this Script script)

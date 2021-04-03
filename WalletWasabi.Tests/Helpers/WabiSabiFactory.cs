@@ -287,7 +287,7 @@ namespace WalletWasabi.Tests.Helpers
 				Array.Empty<long>(),
 				amClient.Credentials.Valuable);
 
-			weight ??= script.EstimateOutputVsize() * 4;
+			weight ??= script.GetOutputVsize() * 4;
 
 			var (realWeightCredentialRequest, _) = weClient.CreateRequest(
 				new[] { startingWeightCredentialAmount - (long)weight },
@@ -309,7 +309,7 @@ namespace WalletWasabi.Tests.Helpers
 				var alice = round.Alices.First(x => x.Id == ccresp.aliceId);
 				var startingWeightCredentialAmount = alice.CalculateRemainingWeightCredentials(round!.RegistrableWeightCredentials);
 				var script = BitcoinFactory.CreateScript();
-				var weight = script.EstimateOutputVsize() * 4;
+				var weight = script.GetOutputVsize() * 4;
 				ret.Add(new OutputRegistrationRequest(
 					round.Id,
 					script,
