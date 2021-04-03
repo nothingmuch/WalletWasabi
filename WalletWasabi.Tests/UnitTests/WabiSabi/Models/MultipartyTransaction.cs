@@ -11,8 +11,8 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Models
 {
 	public class MultipartyTransactionTests
 	{
-		static MoneyRange DefaultAllowedAmounts = new MoneyRange(Money.Zero, Money.Coins(1));
-		static Parameters DefaultParameters = new Parameters(FeeRate.Zero, DefaultAllowedAmounts, DefaultAllowedAmounts, Network.Main);
+		static MoneyRange DefaultAllowedAmounts = new (Money.Zero, Money.Coins(1));
+		static Parameters DefaultParameters = new (FeeRate.Zero, DefaultAllowedAmounts, DefaultAllowedAmounts, Network.Main);
 
 		[Fact]
 		public void TwoPartyNoFees()
@@ -100,9 +100,9 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Models
 			var duplicateOutputNoFee = withOutput.AddOutput(bob).Finalize();
 
 			var tx2 = duplicateOutputNoFee.CreateUnsignedTransaction();
-			Assert.Equal(1, tx2.Outputs.Count);
-			Assert.Contains(script, tx2.Outputs.Select(x => x.ScriptPubKey));
-			Assert.Equal(alice.Coins.First().Amount, tx2.Outputs[0].Value);
+			var output = Assert.Single(tx2.Outputs);
+			Assert.Equal(script, output.ScriptPubKey);
+			Assert.Equal(alice.Coins.First().Amount, output.Value);
 		}
 
 		[Fact]
@@ -197,7 +197,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Models
 			var signed = alice2Sig.CreateTransaction();
 			Assert.NotEqual(alice1Tx.ToString(), signed.ToString());
 			Assert.NotEqual(alice2Tx.ToString(), signed.ToString());
-			Assert.True(signed.Inputs.All(x => x.HasWitScript()));
+			Assert.All(signed.Inputs, x => Assert.True(x.HasWitScript()));
 
 			var coins = new[] { alice1.Coins.First(), alice2.Coins.First() };
 			Assert.True(signed.GetVirtualSize() * 4 < generousFeeTx.EstimatedWeight);
