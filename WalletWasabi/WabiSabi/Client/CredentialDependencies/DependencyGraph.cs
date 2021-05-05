@@ -32,10 +32,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 			// per node entries created in AddNode, querying nodes not in the
 			// graph should result in key errors.
-
-			Successors = Enumerable.Repeat(0, (int)CredentialType.NumTypes).Select(_ => new Dictionary<int, HashSet<CredentialDependency>>()).ToImmutableArray();
-			Predecessors = Enumerable.Repeat(0, (int)CredentialType.NumTypes).Select(_ => new Dictionary<int, HashSet<CredentialDependency>>()).ToImmutableArray();
-			EdgeBalances = Enumerable.Repeat(0, (int)CredentialType.NumTypes).Select(_ => new Dictionary<int, long>()).ToImmutableArray();
+			VertexData = new();
 
 			Vertices = ImmutableList<RequestNode>.Empty;
 
@@ -47,6 +44,8 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 		}
 
 		public ImmutableList<RequestNode> Vertices { get; private set; }
+
+		private Dictionary<int, (long EdgeBalance, HashSet<CredentialDependency> Predecessors, HashSet<CredentialDependency> Successors)[]> VertexData { get; }
 
 		// Internal properties used to keep track of effective values and edges
 		private ImmutableArray<Dictionary<int, long>> EdgeBalances { get; }
@@ -68,37 +67,24 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 		public IOrderedEnumerable<RequestNode> VerticesByBalance(CredentialType type) => Vertices.OrderByDescending(x => Balance(x, type));
 
 		public IEnumerable<CredentialDependency> InEdges(RequestNode node, CredentialType credentialType) =>
-			Predecessors[(int)credentialType][node.Id].ToImmutableArray();
+			VertexData[node.Id][(int)credentialType].Predecessors.ToImmutableArray();
 
 		public IEnumerable<CredentialDependency> OutEdges(RequestNode node, CredentialType credentialType) =>
-			Successors[(int)credentialType][node.Id].ToImmutableArray();
+			VertexData[node.Id][(int)credentialType].Successors.ToImmutableArray();
 
 		private void AddNode(RequestNode node)
 		{
-			for (CredentialType credentialType = 0; credentialType < CredentialType.NumTypes; credentialType++)
+			if (VertexData.ContainsKey(node.Id))
 			{
-				var balances = EdgeBalances[(int)credentialType];
-				if (balances.ContainsKey(node.Id))
-				{
-					throw new InvalidOperationException($"Node {node.Id} already exists in graph");
-				}
-				else
-				{
-					balances[node.Id] = 0;
-				}
-
-				foreach (var container in new[] { Successors[(int)credentialType], Predecessors[(int)credentialType] })
-				{
-					if (container.ContainsKey(node.Id))
-					{
-						throw new InvalidOperationException($"Node {node.Id} already exists in graph");
-					}
-					else
-					{
-						container[node.Id] = new HashSet<CredentialDependency>();
-					}
-				}
+				throw new InvalidOperationException($"Node {node.Id} already exists in graph");
 			}
+
+			var data = new (long EdgeBalance, HashSet<CredentialDependency> Predecessors, HashSet<CredentialDependency> Successors)[(int)CredentialType.NumTypes];
+			for (CredentialType t = 0; t < CredentialType.NumTypes; t++)
+			{
+				data[0] = ((0, new(), new()));
+			}
+			VertexData[node.Id] = data;
 
 			Vertices = Vertices.Add(node);
 		}
@@ -111,28 +97,28 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 		}
 
 		private long Balance(RequestNode node, CredentialType type) =>
-			node.InitialBalance(type) + EdgeBalances[(int)type][node.Id];
+			node.InitialBalance(type) + VertexData[node.Id][(int)type].EdgeBalance;
 
-		private int InDegree(RequestNode node, CredentialType credentialType) =>
-			Predecessors[(int)credentialType][node.Id].Count;
+		private int InDegree(RequestNode node, CredentialType type) =>
+			VertexData[node.Id][(int)type].Predecessors.Count;
 
-		private int OutDegree(RequestNode node, CredentialType credentialType) =>
-			Successors[(int)credentialType][node.Id].Count;
+		private int OutDegree(RequestNode node, CredentialType type) =>
+			VertexData[node.Id][(int)type].Successors.Count;
 
 		private void AddEdge(CredentialDependency edge)
 		{
 			Debug.Assert(edge.Value > 0, "edge value positive");
 
-			var successors = Successors[(int)edge.CredentialType][edge.From.Id];
-			var predecessors = Predecessors[(int)edge.CredentialType][edge.To.Id];
+			var fromVertex = VertexData[edge.From.Id][(int)edge.CredentialType];
+			var toVertex = VertexData[edge.To.Id][(int)edge.CredentialType];
 
 			// Maintain subset of K-regular graph invariant
-			if (successors.Count == K || predecessors.Count == K)
+			if (fromVertex.Successors.Count == K || toVertex.Predecessors.Count == K)
 			{
 				throw new InvalidOperationException("Can't add more than k edges");
 			}
 
-			if (predecessors.Count == K-1)
+			if (toVertex.Predecessors.Count == K-1)
 			{
 				// This is the final in edge edge for the node edge.To
 				if ( Balance(edge.To, edge.CredentialType) + (long)edge.Value < 0 )
@@ -150,11 +136,11 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 			// The edge sum invariant are only checked after the graph is
 			// completed, it's too early to enforce that here without context
 			// (ensuring that if all K
-			EdgeBalances[(int)edge.CredentialType][edge.From.Id] -= (long)edge.Value;
-			successors.Add(edge);
+			fromVertex.EdgeBalance -= (long)edge.Value;
+			fromVertex.Successors.Add(edge);
 
-			EdgeBalances[(int)edge.CredentialType][edge.To.Id] += (long)edge.Value;
-			predecessors.Add(edge);
+			toVertex.EdgeBalance += (long)edge.Value;
+			toVertex.Predecessors.Add(edge);
 		}
 
 		// Drain values towards the center of the graph, propagating values
