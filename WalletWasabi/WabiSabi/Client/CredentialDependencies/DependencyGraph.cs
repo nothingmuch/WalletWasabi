@@ -272,6 +272,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 				// list is guaranteed to be reducible until empty.
 				for (;;)
 				{
+					// FIXME extract to separate method
 					// Order the nodes of the graph based on their balances
 					var ordered = VerticesByBalance(credentialType);
 					List<RequestNode> positive = ordered.ThenBy(x => OutDegree(x, credentialType)).Where(v => Balance(v, credentialType) > 0).ToList();
@@ -309,8 +310,8 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 						// take more nodes until the comparison sign changes or
 						// we run out.
 						while (initialComparison == compare()
-								 && (fanIn ? positive.Count - nPositive > 0
-										   : negative.Count - nNegative > 0))
+						       && (fanIn ? positive.Count - nPositive > 0
+						                 : negative.Count - nNegative > 0))
 						{
 							takeOneMore();
 						}
@@ -338,6 +339,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 					Debug.Assert(smallMagnitudeQueue.All(x => Balance(x, credentialType) != 0), "small values all != 0");
 					negative.RemoveRange(0, nNegative);
 					positive.RemoveRange(0, nPositive);
+					// FIXME extract up to here
 
 					// build a k-ary tree bottom up>
 					// when the accumulated balance is even we can create k
@@ -360,6 +362,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 						Debug.Assert(nodesToCombine.All(x => Balance(x, credentialType) != 0), "nodes to combine should all have non-zero value");
 
+						// TODO specialize drain of reissuance nodes here
 						// enqueue in their stead a reissuance node accounting
 						// for their combined values, positive or negative.
 						Drain(reissuance, nodesToCombine, credentialType);
@@ -382,16 +385,6 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 					// still have a negative value after draining the value from
 					// the larger node.
 					Drain(largestMagnitudeNode, smallMagnitudeQueue, credentialType);
-
-					// Return the last smaller magnitude node if it's got a non 0 balance.
-					// largestMagnitudeNode should be fully utilized so it never
-					// needs to be returned when it has a non-zero balance,
-					// because the stopping condition is determined only by
-					// negative nodes having been eliminated.
-					if (Balance(smallMagnitudeQueue.Last(), credentialType) != 0)
-					{
-						(fanIn ? negative : positive).Add(smallMagnitudeQueue.Last());
-					}
 				}
 
 				// at this point the sub-graph of credentialType edges should be
