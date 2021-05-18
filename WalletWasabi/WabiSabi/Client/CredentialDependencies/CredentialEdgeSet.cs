@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
@@ -32,7 +31,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 		public int RemainingZeroOutDegree(RequestNode node) => node.MaxZeroOutDegree - ZeroOutDegree(node);
 
-		public int AvailableZeroOutDegree(RequestNode node) => RemainingZeroOutDegree(node) + ( RemainingNonZeroOutDegree(node) - ( Balance(node) > 0 ? 1 : 0 ) );
+		public int AvailableZeroOutDegree(RequestNode node) => RemainingZeroOutDegree(node) + (RemainingNonZeroOutDegree(node) - (Balance(node) > 0 ? 1 : 0));
 
 		public CredentialEdgeSet AddEdge(RequestNode from, RequestNode to, ulong value)
 		{
@@ -128,10 +127,6 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 				.ThenByDescending(v => RemainingInDegree(v))
 				.ToImmutableArray();
 
-			Debug.Assert(sources.All(v => Balance(v) >= 0));
-			Debug.Assert(sinks.All(v => Balance(v) <= 0));
-			Debug.Assert(sinks.Length > 0);
-
 			var nSources = 1;
 			var nSinks = 1;
 
@@ -153,8 +148,8 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 				// Take more nodes until the comparison sign changes or
 				// we run out.
 				while (initialComparison == CompareSums()
-				       && (fanIn ? sources.Length - nSources > 0
-				                 : sinks.Length - nSinks > 0))
+					   && (fanIn ? sources.Length - nSources > 0
+								 : sinks.Length - nSinks > 0))
 				{
 					takeOneMore();
 				}
@@ -205,19 +200,13 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 		public CredentialEdgeSet AddZeroEdges(RequestNode src, RequestNode dst)
 		{
-			Debug.Assert(Balance(dst) == 0);
-			Debug.Assert(RemainingInDegree(dst) >= 0);
-
-			if ( RemainingInDegree(dst) == 0 )
+			if (RemainingInDegree(dst) == 0)
 			{
 				return this;
 			}
 			else
 			{
-				var e = AddZeroEdge(src, dst);
-				Debug.Assert(e.InDegree(dst) > InDegree(dst));
-				Debug.Assert(e.RemainingInDegree(dst) < RemainingInDegree(dst));
-				return e.AddZeroEdges(src, dst);
+				return AddZeroEdge(src, dst).AddZeroEdges(src, dst);
 			}
 		}
 
@@ -238,7 +227,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 				// Fan out, discharge the entire balance, adding zero edges if
 				// needed (might not be if the discharged node has already
 				// received an input edge in a previous pass).
-				return AddEdge(node, dischargeNode, (ulong)Math.Min(Balance(node), -1 * value));//.DrainZeroCredentials(node, dischargeNode);
+				return AddEdge(node, dischargeNode, (ulong)Math.Min(Balance(node), -1 * value));
 			}
 			else if (value > 0)
 			{
@@ -261,19 +250,11 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 					return this;
 				}
 			}
-			else if (value == 0 && ( dischargeNode.InitialBalance(CredentialType) == 0 ))
+			else if (value == 0 && (dischargeNode.InitialBalance(CredentialType) == 0))
 			{
 				// eagerly discharge zero credentials when the child node is a reissuance node
 				return DrainZeroCredentials(node, dischargeNode);
 			}
-			// else if (value == 0 && ( dischargeNode.InitialBalance(CredentialType) < 0 || node.InitialBalance(CredentialType) > 0 ))
-			// {
-			// 	return DrainZeroCredentials(node, dischargeNode);
-			// }
-			// else if (value == 0 && ( node.InitialBalance(CredentialType) < 0 || dischargeNode.InitialBalance(CredentialType) > 0 ))
-			// {
-			// 	return DrainZeroCredentials(dischargeNode, node);
-			// }
 			else
 			{
 				return this;
@@ -282,20 +263,13 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 		public CredentialEdgeSet DrainZeroCredentials(RequestNode src, RequestNode dst)
 		{
-			if ( Balance(dst) != 0 || AvailableZeroOutDegree(src) == 0 || RemainingInDegree(dst) == 0 )
+			if (Balance(dst) != 0 || AvailableZeroOutDegree(src) == 0 || RemainingInDegree(dst) == 0)
 			{
 				return this;
 			}
 			else
 			{
-				Debug.Assert(ZeroOutDegree(src) < DependencyGraph.K);
-				Debug.Assert(RemainingZeroOutDegree(src) > 0);
-				Debug.Assert(Balance(src) == 0 || RemainingZeroOutDegree(src) > 1);
-				Debug.Assert(AvailableZeroOutDegree(src) > 0);
-
-				var e = AddZeroEdge(src, dst);
-				Debug.Assert(e.RemainingInDegree(dst) < RemainingInDegree(dst));
-				return e.DrainZeroCredentials(src, dst);
+				return AddZeroEdge(src, dst).DrainZeroCredentials(src, dst);
 			}
 		}
 	}

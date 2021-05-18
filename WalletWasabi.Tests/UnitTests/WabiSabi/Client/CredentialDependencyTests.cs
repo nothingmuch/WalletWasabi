@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using WalletWasabi.WabiSabi.Client.CredentialDependencies;
@@ -40,38 +39,40 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 			Assert.Equal(2, g.InEdges(large.To, CredentialType.Amount).Count());
 			Assert.Equal(1, g.InEdges(large.To, CredentialType.Amount).Select(e => e.From).Distinct().Count());
 
-			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet() );
-			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Where(e => e.Value == 0).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet() );
-			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Where(e => e.Value == 1).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet() );
+			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet());
+			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Where(e => e.Value == 0).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet());
+			Assert.Equal(g.OutEdges(large.To, CredentialType.Amount).Where(e => e.Value == 1).Select(e => e.To).ToHashSet(), g.Vertices.Skip(1).Take(2).ToHashSet());
 
 			AssertResolvedGraphInvariants(g, inputValues, outputValues);
 		}
 
-		// [Fact]
-		// public void ResolveCredentialDependenciesNoVsize()
-		// {
-		// 	var g = DependencyGraph.ResolveCredentialDependencies(new ulong[][] { new[] { 1UL, 0UL } }, new ulong[][] { new[] { 1UL, 0UL } });
+		[Fact]
+		public void ResolveCredentialDependenciesNoVsize()
+		{
+			var inputValues = new ulong[][] { new[] { 1UL, 0UL } };
+			var outputValues = new ulong[][] { new[] { 1UL, 0UL } };
+			var g = DependencyGraph.ResolveCredentialDependencies(inputValues, outputValues);
 
-		// 	Assert.Equal(2, g.Vertices.Count);
+			Assert.Equal(2, g.Vertices.Count);
 
-		// 	var edges = g.OutEdges(g.Vertices[0], CredentialType.Amount);
+			var edges = g.OutEdges(g.Vertices[0], CredentialType.Amount);
 
-		// 	Assert.Equal(2, edges.Count());
-		// 	Assert.Equal(1, edges.Where(x => x.Value > 0).Count());
+			Assert.Equal(2, edges.Count());
+			Assert.Equal(1, edges.Where(x => x.Value > 0).Count());
 
-		// 	var nonZeroEdge = edges.OrderByDescending(e => e.Value).First();
-		// 	Assert.Equal(1UL, nonZeroEdge.Value);
-		// 	Assert.Equal(g.Vertices[1], nonZeroEdge.To);
-		// 	Assert.Empty(g.OutEdges(nonZeroEdge.To, CredentialType.Amount));
-		// 	Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.Amount).Count());
-		// 	Assert.Equal(1, g.InEdges(nonZeroEdge.To, CredentialType.Amount).Select(e => e.From).Distinct().Count());
-		// 	Assert.Empty(g.OutEdges(nonZeroEdge.To, CredentialType.VirtualBytes));
-		// 	Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Count());
-		// 	Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Select(e => e.Value == 0).Count());
-		// 	Assert.Equal(g.Vertices[0], g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Select(e => e.From).Distinct().Single());
+			var nonZeroEdge = edges.OrderByDescending(e => e.Value).First();
+			Assert.Equal(1UL, nonZeroEdge.Value);
+			Assert.Equal(g.Vertices[1], nonZeroEdge.To);
+			Assert.Empty(g.OutEdges(nonZeroEdge.To, CredentialType.Amount));
+			Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.Amount).Count());
+			Assert.Equal(1, g.InEdges(nonZeroEdge.To, CredentialType.Amount).Select(e => e.From).Distinct().Count());
+			Assert.Empty(g.OutEdges(nonZeroEdge.To, CredentialType.VirtualBytes));
+			Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Count());
+			Assert.Equal(2, g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Select(e => e.Value == 0).Count());
+			Assert.Equal(g.Vertices[0], g.InEdges(nonZeroEdge.To, CredentialType.VirtualBytes).Select(e => e.From).Distinct().Single());
 
-		// 	AssertResolvedGraphInvariants(g);
-		// }
+			AssertResolvedGraphInvariants(g, inputValues, outputValues);
+		}
 
 		[Theory]
 		[InlineData("1,1", "1,1", 2)]
