@@ -168,14 +168,20 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 		// degree of the largest magnitude node edges that cancel out positive
 		// and negative values are added. This will fully discharge the largest
 		// magnitude node, except when it is positive and all of the remaining
-		// negative nodes on the graph add up to less than it. Inputs' extra
-		// zero credentials are used opportunistically when a single positive
-		// valued node is matched with several negative valued nodes, but only
-		// for nodes with no remaining balance, the final node may need a
-		// non-zero edge from the next largest positive valued node (but in that
-		// case it won't need a zero credential).
+		// negative nodes on the graph add up to less than it.
 		//
-		// TODO this should leave no nodes with InDegree != 0
+		// There are two special related special cases affecting vbyte
+		// credentials - when the positive valued nodes are uniform and
+		// sufficient for all of the negative amounts with leftovers, instead of
+		// taking the largest node all of the negative nodes are reduced
+		// together resulting in a more balanced structure overall. This is
+		// combined with another special case that checks if each of the
+		// positive valued nodes are all strictly greater than a smaller number
+		// of negative nodes (uniform values are a special case of this), the
+		// positive and negative nodes will be zipped with each node only
+		// requiring a single edge. These can optimize amount credentials as
+		// well when consolidating multiple equal valued inputs, but is only
+		// expected to regularly occur for vbyte credentials.
 		//
 		// After no negative value nodes, the remaining in-edges of all nodes
 		// must be filled with zero credentials. These are added according to
