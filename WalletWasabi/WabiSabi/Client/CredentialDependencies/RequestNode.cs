@@ -1,17 +1,18 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using WalletWasabi.Helpers;
 
 namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 {
-	public class RequestNode
+	public abstract class RequestNode
 	{
-		public RequestNode(IEnumerable<long> values, int inDegree, int outDegree, int zeroOnlyOutDegree)
+		public RequestNode(IEnumerable<long> values, int maxInDegree, int maxOutDegree, int maxZeroOnlyOutDegree)
 		{
-			Values = Guard.InRange(nameof(values), values, DependencyGraph.K, DependencyGraph.K).ToImmutableArray();
-			MaxInDegree = inDegree;
-			MaxOutDegree = outDegree;
-			MaxZeroOnlyOutDegree = zeroOnlyOutDegree;
+			Values = Guard.InRange(nameof(values), values, DependencyGraph.CredentialTypes.Count(), DependencyGraph.CredentialTypes.Count()).ToImmutableArray();
+			MaxInDegree = maxInDegree;
+			MaxOutDegree = maxOutDegree;
+			MaxZeroOnlyOutDegree = maxZeroOnlyOutDegree;
 		}
 
 		public ImmutableArray<long> Values { get; }
