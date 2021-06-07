@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using NBitcoin;
 using System;
 using System.Collections.Generic;
@@ -11,6 +10,7 @@ using WalletWasabi.Crypto.ZeroKnowledge;
 using WalletWasabi.Logging;
 using WalletWasabi.WabiSabi.Backend.PostRequests;
 using WalletWasabi.WabiSabi.Backend.Rounds;
+using WalletWasabi.WabiSabi.Client.CredentialDependencies;
 using WalletWasabi.WabiSabi.Crypto;
 using WalletWasabi.WabiSabi.Models;
 using WalletWasabi.WabiSabi.Models.MultipartyTransaction;
@@ -45,6 +45,9 @@ namespace WalletWasabi.WabiSabi.Client
 		public KeyManager Keymanager { get; }
 		private RoundStateUpdater RoundStatusUpdater { get; }
 
+		private Dictionary<CredentialDependency, TaskCompletionSource<Credential>> dictionaryOfDependencies { get; } = new();
+		private HashSet<SmartRequestNode> smartNodes { get; } = new();
+
 		public async Task StartCoinJoinAsync(CancellationToken cancellationToken)
 		{
 			var roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState => roundState.Phase == Phase.InputRegistration, cancellationToken).ConfigureAwait(false);
@@ -58,24 +61,75 @@ namespace WalletWasabi.WabiSabi.Client
 			var allLockedInternalKeys = Keymanager.GetKeys(x => x.IsInternal && x.KeyState == KeyState.Locked);
 			var outputs = outputValues.Zip(allLockedInternalKeys, (amount, hdPubKey) => new TxOut(amount, hdPubKey.P2wpkhScript));
 
-			var plan = CreatePlan(
-				Coins.Select(x => (ulong)x.Amount.Satoshi),
-				Coins.Select(x => (ulong)x.ScriptPubKey.EstimateInputVsize()),
-				outputValues);
+			var dependencyGraph = DependencyGraph.ResolveCredentialDependencies(Coins, outputs, roundState.FeeRate);
 
 			List<AliceClient> aliceClients = CreateAliceClients(roundState);
 
 			// Register coins.
+			// TODO:
+			// 1. randomize delays uniformly
+			// 2. simulate decomposition of prefixes, ensure sensible result
+			//    for all prefixes (introduces some bias, depending on what
+			//    "sensible" means)
 			aliceClients = await RegisterCoinsAsync(aliceClients, cancellationToken).ConfigureAwait(false);
 
-			// Confirm coins.
-			aliceClients = await ConfirmConnectionsAsync(aliceClients, roundState.MaxVsizeAllocationPerAlice, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
 
-			// Output registration.
+			// Confirm coins.
+			// TODO: move input registrations to the connection confirmation
+			// loop of each alice client, to prevent any timing correlations
+			// between different alices of the same coinjoin client.
+			// As the overall state of which coins have been
+			// registered is updated, the credential amounts being requested
+			// should be updated by recalculating the graph based on the
+			// decomposition only of the registered coins.
+			aliceClients = await ConfirmConnectionsAsync(aliceClients, dependencyGraph, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
+
+			foreach ((var aliceClient, var node) in Enumerable.Zip(aliceClients, dependencyGraph.Inputs))
+			{
+				SetTaskCompletionSources(dependencyGraph, node, (aliceClient.RealAmountCredentials, aliceClient.RealVsizeCredentials));
+			}
+
 			roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState.Id, rs => rs.Phase == Phase.OutputRegistration, cancellationToken).ConfigureAwait(false);
+
+			var bobClient = CreateBobClient(roundState);
+
+			foreach (var edge in dependencyGraph.AllInEdges())
+			{
+				dictionaryOfDependencies[edge] = new TaskCompletionSource<Credential>();
+			}
+
+			foreach (var node in dependencyGraph.Reissuances)
+			{
+				smartNodes.Add(new SmartRequestNode(
+					node,
+					dependencyGraph.InEdges(node, CredentialType.Amount).Select(e => dictionaryOfDependencies[e].Task),
+					dependencyGraph.InEdges(node, CredentialType.Vsize).Select(e => dictionaryOfDependencies[e].Task),
+					async (issuedAmountCredentials, issuedVsizeCredentials) => SetTaskCompletionSources(
+						dependencyGraph,
+						node,
+						await bobClient.ReissueCredentialsAsync( // TODO SetResult() for returned values
+							dependencyGraph.OutEdges(node, CredentialType.Amount).Select(e => e.Value).Cast<long>(), // TODO s/u(?=long)//
+							dependencyGraph.OutEdges(node, CredentialType.Vsize).Select(e => e.Value).Cast<long>(), // TODO s/u(?=long)//
+							issuedAmountCredentials,
+							issuedVsizeCredentials,
+							cancellationToken))));
+			}
+
+			foreach ((var txout, var node) in Enumerable.Zip(outputs, dependencyGraph.Outputs))
+			{
+				smartNodes.Add(new SmartRequestNode(
+					   node,
+					   dependencyGraph.InEdges(node, CredentialType.Amount).Select(e => dictionaryOfDependencies[e].Task),
+					   dependencyGraph.InEdges(node, CredentialType.Vsize).Select(e => dictionaryOfDependencies[e].Task),
+					   (issuedAmountCredentials, issuedVsizeCredentials) => bobClient.RegisterOutputAsync(
+						   txout.Value, txout.ScriptPubKey, // TODO refactor to pass in TxOut
+						   issuedAmountCredentials,
+						   issuedVsizeCredentials,
+						   cancellationToken)));
+			}
+
 			var outputsWithCredentials = outputs.Zip(aliceClients, (output, alice) => (output, alice.RealAmountCredentials, alice.RealVsizeCredentials));
-			var bobClients = Enumerable.Range(0, int.MaxValue).Select(_ => CreateBobClient(roundState));
-			await RegisterOutputsAsync(bobClients, outputsWithCredentials, cancellationToken).ConfigureAwait(false);
+			await RegisterOutputsAsync(bobClient, outputsWithCredentials, cancellationToken).ConfigureAwait(false);
 
 			roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState.Id, rs => rs.Phase == Phase.TransactionSigning, cancellationToken).ConfigureAwait(false);
 			var signingState = roundState.Assert<SigningState>();
@@ -91,6 +145,23 @@ namespace WalletWasabi.WabiSabi.Client
 			// Send signature.
 			await SignTransactionAsync(aliceClients, unsignedCoinJoin, cancellationToken).ConfigureAwait(false);
 		}
+
+		private async Task SetTaskCompletionSources( // TODO rename
+			DependencyGraph dependencyGraph,
+			RequestNode node,
+			(IEnumerable<Credential>, IEnumerable<Credential>) pair)
+		{
+			foreach ((var edge, var credential) in Enumerable.Zip(dependencyGraph.OutEdges(node, CredentialType.Amount), pair.First))
+			{
+				dictionaryOfDependencies[edge].SetResult(credential);
+			}
+
+			foreach ((var edge, var credential) in Enumerable.Zip(dependencyGraph.OutEdges(node, CredentialType.Vsize), pair.Second))
+			{
+				dictionaryOfDependencies[edge].SetResult(credential);
+			}
+		}
+
 
 		private List<AliceClient> CreateAliceClients(RoundState roundState)
 		{
@@ -131,13 +202,18 @@ namespace WalletWasabi.WabiSabi.Client
 			return completedRequests.Where(x => x is not null).Cast<AliceClient>().ToList();
 		}
 
-		private async Task<List<AliceClient>> ConfirmConnectionsAsync(IEnumerable<AliceClient> aliceClients, long maxVsizeAllocationPerAlice, TimeSpan connectionConfirmationTimeout, CancellationToken cancellationToken)
+		private async Task<List<AliceClient>> ConfirmConnectionsAsync(IEnumerable<AliceClient> aliceClients, DependencyGraph graph, TimeSpan connectionConfirmationTimeout, CancellationToken cancellationToken)
 		{
-			async Task<AliceClient?> ConfirmConnectionTask(AliceClient aliceClient)
+			async Task<AliceClient?> ConfirmConnectionTask(AliceClient aliceClient, RequestNode node)
 			{
+				// TODO s/u(?=long)//
+				// is OrderBy required? hashset does not guarantee order stability
+				var amountsToRequest = graph.OutEdges(node, CredentialType.Amount).Select(e => e.Value).Cast<long>();
+				var vsizesToRequest = graph.OutEdges(node, CredentialType.Vsize).Select(e => e.Value).Cast<long>();
+
 				try
 				{
-					await aliceClient.ConfirmConnectionAsync(connectionConfirmationTimeout, maxVsizeAllocationPerAlice, cancellationToken).ConfigureAwait(false);
+					await aliceClient.ConfirmConnectionAsync(connectionConfirmationTimeout, amountsToRequest, vsizesToRequest, cancellationToken).ConfigureAwait(false);
 					return aliceClient;
 				}
 				catch (Exception e)
@@ -147,23 +223,22 @@ namespace WalletWasabi.WabiSabi.Client
 				}
 			}
 
-			var confirmationRequests = aliceClients.Select(ConfirmConnectionTask);
+			var confirmationRequests = Enumerable.Zip(aliceClients, graph.Inputs, ConfirmConnectionTask);
 			var completedRequests = await Task.WhenAll(confirmationRequests).ConfigureAwait(false);
 
-			return completedRequests.Where(x => x is not null).Cast<AliceClient>().ToList();
+			// TODO re-decompose, and re-resolve dependencies on any failure,
+			// since the graph is no longer valid with some edges missing.
+			if (completedRequests.Any(x => x is null))
+			{
+				throw new NotImplementedException("input confirmation failure not yet handled");
+			}
+
+			return completedRequests.Cast<AliceClient>().ToList();
 		}
 
 		private IEnumerable<Money> DecomposeAmounts(FeeRate feeRate)
 		{
 			return Coins.Select(c => c.Amount - feeRate.GetFee(c.ScriptPubKey.EstimateInputVsize()));
-		}
-
-		private IEnumerable<IEnumerable<(ulong RealAmountCredentialValue, ulong RealVsizeCredentialValue, Money Value)>> CreatePlan(
-			IEnumerable<ulong> realAmountCredentialValues,
-			IEnumerable<ulong> realVsizeCredentialValues,
-			IEnumerable<Money> outputValues)
-		{
-			yield return realAmountCredentialValues.Zip(realVsizeCredentialValues, outputValues, (a, v, o) => (a, v, o));
 		}
 
 		private async Task RegisterOutputsAsync(

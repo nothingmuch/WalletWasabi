@@ -8,15 +8,15 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 	public record CredentialEdgeSet
 	{
 		public CredentialType CredentialType { get; init; }
-		public ImmutableDictionary<RequestNode, ImmutableHashSet<CredentialDependency>> Predecessors { get; init; } = ImmutableDictionary.Create<RequestNode, ImmutableHashSet<CredentialDependency>>();
-		public ImmutableDictionary<RequestNode, ImmutableHashSet<CredentialDependency>> Successors { get; init; } = ImmutableDictionary.Create<RequestNode, ImmutableHashSet<CredentialDependency>>();
+		public ImmutableDictionary<RequestNode, ImmutableSortedSet<CredentialDependency>> Predecessors { get; init; } = ImmutableDictionary.Create<RequestNode, ImmutableSortedSet<CredentialDependency>>();
+		public ImmutableDictionary<RequestNode, ImmutableSortedSet<CredentialDependency>> Successors { get; init; } = ImmutableDictionary.Create<RequestNode, ImmutableSortedSet<CredentialDependency>>();
 		public ImmutableDictionary<RequestNode, long> EdgeBalances { get; init; } = ImmutableDictionary.Create<RequestNode, long>();
 
 		public long Balance(RequestNode node) => node.InitialBalance(CredentialType) + EdgeBalances[node];
 
-		public ImmutableHashSet<CredentialDependency> InEdges(RequestNode node) => Predecessors[node];
+		public ImmutableSortedSet<CredentialDependency> InEdges(RequestNode node) => Predecessors[node];
 
-		public ImmutableHashSet<CredentialDependency> OutEdges(RequestNode node) => Successors[node];
+		public ImmutableSortedSet<CredentialDependency> OutEdges(RequestNode node) => Successors[node];
 
 		public int InDegree(RequestNode node) => InEdges(node).Count;
 

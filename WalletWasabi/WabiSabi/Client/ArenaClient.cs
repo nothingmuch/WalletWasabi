@@ -184,6 +184,7 @@ namespace WalletWasabi.WabiSabi.Client
 					realVsizeCredentialRequestData.CredentialsRequest),
 				cancellationToken).ConfigureAwait(false);
 
+			// FIXME why is this done twice?
 			AmountCredentialClient.HandleResponse(confirmConnectionResponse.ZeroAmountCredentials, zeroAmountCredentialRequestData.CredentialsResponseValidation);
 			VsizeCredentialClient.HandleResponse(confirmConnectionResponse.ZeroVsizeCredentials, zeroVsizeCredentialRequestData.CredentialsResponseValidation);
 

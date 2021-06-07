@@ -30,6 +30,7 @@ namespace WalletWasabi.WabiSabi.Client
 				cancellationToken).ConfigureAwait(false);
 		}
 
+		// TODO remove
 		public async Task<(Credential[] RealAmountCredentials, Credential[] RealVsizeCredentials)> ReissueCredentialsAsync(
 			long amount1,
 			long amount2,
@@ -38,13 +39,28 @@ namespace WalletWasabi.WabiSabi.Client
 			IEnumerable<Credential> amountCredential,
 			IEnumerable<Credential> vsizeCredential,
 			CancellationToken cancellationToken)
+			=>
+			await ReissueCredentialsAsync(
+				new[] { amount1, amount2 },
+				new[] { vsize1, vsize2 },
+				amountCredential,
+				vsizeCredential,
+				cancellationToken
+			);
+
+		public async Task<(Credential[] RealAmountCredentials, Credential[] RealVsizeCredentials)> ReissueCredentialsAsync(
+			IEnumerable<long> amountsToRequest,
+			IEnumerable<long> vsizesToRequest,
+			IEnumerable<Credential> amountCredentials,
+			IEnumerable<Credential> vsizeCredentials,
+			CancellationToken cancellationToken)
 		{
 			var response = await ArenaClient.ReissueCredentialAsync(
 				RoundId,
-				new[] { amount1, amount2 },
-				new[] { vsize1,	vsize2 },
-				amountCredential,
-				vsizeCredential,
+				amountsToRequest,
+				vsizesToRequest,
+				amountCredentials,
+				vsizeCredentials,
 				cancellationToken)
 				.ConfigureAwait(false);
 

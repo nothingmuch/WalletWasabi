@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using NBitcoin;
 
 namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 {
@@ -33,9 +34,39 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 		public IEnumerable<CredentialDependency> OutEdges(RequestNode node, CredentialType credentialType) => EdgeSets[credentialType].OutEdges(node);
 
+
+		// TODO is this still required?
+		public IEnumerable<CredentialDependency> AllOutEdges(CredentialType credentialType)
+			=> Enumerable.Concat(Inputs, Reissuances).SelectMany(node => EdgeSets[credentialType].OutEdges(node));
+
+		public IEnumerable<CredentialDependency> AllInEdges(CredentialType credentialType)
+			=> Enumerable.Concat(Reissuances, Outputs).SelectMany(node => EdgeSets[credentialType].InEdges(node));
+
+		public IEnumerable<CredentialDependency> AllInEdges() => Enum.GetValues<CredentialType>().SelectMany(type => AllInEdges(type));
+
 		public int InDegree(RequestNode node, CredentialType credentialType) => EdgeSets[credentialType].InDegree(node);
 
 		public int OutDegree(RequestNode node, CredentialType credentialType) => EdgeSets[credentialType].OutDegree(node);
+
+		public static DependencyGraph ResolveCredentialDependencies(IEnumerable<Coin> inputs, IEnumerable<TxOut> outputs, FeeRate feerate)
+		{
+			var inputSizes = inputs.Select(x => x.ScriptPubKey.EstimateInputVsize());
+			var effectiveValues = Enumerable.Zip(inputs, inputSizes, (coin, size) => coin.Amount - feerate.GetFee(size));
+
+			if ( effectiveValues.Any(x => x <= Money.Zero))
+			{
+				throw new InvalidOperationException($"Not enough funds to pay for the fees.");
+			}
+
+			var outputSizes = outputs.Select(x => x.ScriptPubKey.EstimateOutputVsize());
+			var effectiveCosts = Enumerable.Zip(outputs, outputSizes, (txout, size) => txout.Value - feerate.GetFee(size));
+
+			// TODO s/u(?=long)//;
+			return ResolveCredentialDependencies(
+				Enumerable.Zip(effectiveValues.Cast<ulong>(), inputSizes.Cast<ulong>(), ImmutableArray.Create).Cast<IEnumerable<ulong>>(),
+				Enumerable.Zip(effectiveCosts.Cast<ulong>(), outputSizes.Cast<ulong>(), ImmutableArray.Create).Cast<IEnumerable<ulong>>()
+			);
+		}
 
 		/// <summary>Construct a graph from amounts, and resolve the
 		/// credential dependencies.</summary>

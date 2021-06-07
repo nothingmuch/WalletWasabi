@@ -100,6 +100,7 @@ namespace WalletWasabi.WabiSabi.Crypto
 			CancellationToken cancellationToken)
 		{
 			// Make sure we request always the same number of credentials
+			// TODO make into a Guard and remove .Add(0)?
 			var credentialAmountsToRequest = amountsToRequest.ToList();
 			var missingCredentialRequests = NumberOfCredentials - amountsToRequest.Count();
 			for (var i = 0; i < missingCredentialRequests; i++)
@@ -210,7 +211,7 @@ namespace WalletWasabi.WabiSabi.Crypto
 			var credentialReceived = credentials.Select(x =>
 				new Credential(new Scalar((ulong)x.Requested.Amount), x.Requested.Randomness, x.Issued));
 
-			return ZeroCredentialPool.ProcessAndGetValuableCredentials(credentialReceived).ToArray();
+			return ZeroCredentialPool.ProcessAndGetValuableCredentials(credentialReceived).ToArray(); // TODO remove ZeroCredential
 		}
 
 		private Transcript BuildTransnscript(bool isNullRequest)
