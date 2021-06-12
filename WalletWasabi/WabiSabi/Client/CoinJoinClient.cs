@@ -160,7 +160,7 @@ namespace WalletWasabi.WabiSabi.Client
 			var allDenominations = BaseDenominationGenerator.Generate();
 			GreedyDecomposer greedyDecomposer = new(allDenominations);
 			var amounts = Coins.Select(c => c.EffectiveValue(feeRate));
-			var denominations = greedyDecomposer.Decompose(amounts.Sum());
+			var denominations = greedyDecomposer.Decompose(amounts.Sum(), feeRate);
 			return amounts;
 		}
 

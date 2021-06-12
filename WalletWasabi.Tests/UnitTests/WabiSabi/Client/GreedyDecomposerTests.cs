@@ -32,7 +32,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 		public void Decompose1Test(long amount, long[] expected)
 		{
 			var decomposer = new GreedyDecomposer(new Money[] { new (1L), new (2L), new (5L), new (10L) });
-			var amounts = decomposer.Decompose(Money.Satoshis(amount));
+			var amounts = decomposer.Decompose(Money.Satoshis(amount), new FeeRate(0L));
 			Assert.Equal(Money.Satoshis(amount), amounts.Sum());
 			Assert.Equal(expected, amounts.Select(x => x.Satoshi));
 		}
@@ -62,7 +62,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 		public void Decompose2Test(long amount, long[] expected)
 		{
 			var decomposer = new GreedyDecomposer(new Money[] { new (1L), new (3L), new (11L) });
-			var amounts = decomposer.Decompose(Money.Satoshis(amount));
+			var amounts = decomposer.Decompose(Money.Satoshis(amount), new FeeRate(0L));
 			Assert.Equal(Money.Satoshis(amount), amounts.Sum());
 			Assert.Equal(expected, amounts.Select(x => x.Satoshi));
 		}
