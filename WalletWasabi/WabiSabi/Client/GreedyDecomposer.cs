@@ -17,16 +17,16 @@ namespace WalletWasabi.WabiSabi.Client
 
 		public ImmutableList<Money> Denominations { get; }
 
-		public IEnumerable<Money> Decompose(Money amount, FeeRate feeRate)
+		public IEnumerable<Money> Decompose(Money amount, Money costPerOutput)
 		{
 			var i = 0;
 			var denomination = Denominations[i];
-			while (amount > Money.Zero)
+			while (amount > costPerOutput)
 			{
-				if (denomination <= amount)
+				if (denomination + costPerOutput <= amount)
 				{
 					yield return denomination;
-					amount -= denomination + feeRate.GetFee(31); // TODO how to determine output size?
+					amount -= denomination + costPerOutput;
 				}
 				else if (++i < Denominations.Count)
 				{
@@ -34,7 +34,7 @@ namespace WalletWasabi.WabiSabi.Client
 				}
 				else
 				{
-					yield return amount; // FIXME remove
+					yield return amount - costPerOutput; // FIXME remove
 				}
 			}
 		}
