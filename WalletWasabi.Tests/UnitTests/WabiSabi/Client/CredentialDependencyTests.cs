@@ -253,6 +253,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 		[InlineData("21,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1", "11,5 10,5 10,5 10,6", 42)]
 		[InlineData("21,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1", "10,5 10,5 10,5 10,6", 43)]
 		[InlineData("21,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1 1,1", "10,5 10,5 10,5 10,5", 42)]
+		[InlineData("99991099,33245 9991099,33245 1099,33245","100003999,31 9569937,31 358293,31", 8)]
 		public async void ResolveCredentialDependenciesAsync(string inputs, string outputs, int finalVertexCount)
 		{
 			// blackbox tests (apart from finalVertexCount, which leaks

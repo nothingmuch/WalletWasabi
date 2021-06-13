@@ -53,7 +53,7 @@ namespace WalletWasabi.WabiSabi.Client.CredentialDependencies
 
 			if (effectiveValues.Any(x => x <= Money.Zero))
 			{
-				throw new InvalidOperationException($"Not enough funds to pay for the fees.");
+				throw new InvalidOperationException($"Uneconomical input.");
 			}
 
 			var outputSizes = outputs.Select(x => x.ScriptPubKey.EstimateOutputVsize());

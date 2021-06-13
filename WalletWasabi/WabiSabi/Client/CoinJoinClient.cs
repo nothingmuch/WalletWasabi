@@ -62,14 +62,17 @@ namespace WalletWasabi.WabiSabi.Client
 
 			List<AliceClient> aliceClients = CreateAliceClients(roundState);
 
+			DependencyGraph dependencyGraph = DependencyGraph.ResolveCredentialDependencies(aliceClients.Select(a => a.Coin), outputTxOuts, roundState.FeeRate, roundState.MaxVsizeAllocationPerAlice);
+
 			// Register coins.
 			aliceClients = await RegisterCoinsAsync(aliceClients, cancellationToken).ConfigureAwait(false);
 
 			// Confirm coins.
-			aliceClients = await ConfirmConnectionsAsync(aliceClients, roundState.MaxVsizeAllocationPerAlice, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
+			var amountsToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Amount).Select(e => (long)e.Value).Where(x => x != 0));
+			var vsizesToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Vsize).Select(e => (long)e.Value).Where(x => x != 0));
+			aliceClients = await ConfirmConnectionsAsync(aliceClients, amountsToRequest, vsizesToRequest, roundState.MaxVsizeAllocationPerAlice, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
 
 			// Re-issuances.
-			DependencyGraph dependencyGraph = DependencyGraph.ResolveCredentialDependencies(aliceClients.Select(a => a.Coin), outputTxOuts, roundState.FeeRate, roundState.MaxVsizeAllocationPerAlice);
 			DependencyGraphResolver dgr = new(dependencyGraph);
 			var bobClient = CreateBobClient(roundState);
 			var outputCredentials = await dgr.ResolveAsync(aliceClients, bobClient, cancellationToken).ConfigureAwait(false);
@@ -133,23 +136,24 @@ namespace WalletWasabi.WabiSabi.Client
 			return completedRequests.Where(x => x is not null).Cast<AliceClient>().ToList();
 		}
 
-		private async Task<List<AliceClient>> ConfirmConnectionsAsync(IEnumerable<AliceClient> aliceClients, long maxVsizeAllocationPerAlice, TimeSpan connectionConfirmationTimeout, CancellationToken cancellationToken)
+		private async Task<List<AliceClient>> ConfirmConnectionsAsync(IEnumerable<AliceClient> aliceClients, IEnumerable<IEnumerable<long>> amountsToRequest, IEnumerable<IEnumerable<long>> vsizesToRequest, long vsizeAllocation, TimeSpan connectionConfirmationTimeout, CancellationToken cancellationToken)
 		{
-			async Task<AliceClient?> ConfirmConnectionTask(AliceClient aliceClient)
+			async Task<AliceClient?> ConfirmConnectionTask(AliceClient aliceClient, IEnumerable<long> amountsToRequest, IEnumerable<long> vsizesToRequest)
 			{
 				try
 				{
-					await aliceClient.ConfirmConnectionAsync(connectionConfirmationTimeout, maxVsizeAllocationPerAlice, cancellationToken).ConfigureAwait(false);
+					await aliceClient.ConfirmConnectionAsync(connectionConfirmationTimeout, amountsToRequest, vsizesToRequest, vsizeAllocation, cancellationToken).ConfigureAwait(false);
 					return aliceClient;
 				}
 				catch (Exception e)
 				{
 					Logger.LogWarning($"Round ({aliceClient.RoundId}), Alice ({aliceClient.AliceId}): {nameof(AliceClient.ConfirmConnectionAsync)} failed, reason:'{e}'.");
+					throw e;
 					return default;
 				}
 			}
 
-			var confirmationRequests = aliceClients.Select(ConfirmConnectionTask);
+			var confirmationRequests = aliceClients.Zip(amountsToRequest, vsizesToRequest, ConfirmConnectionTask);
 			var completedRequests = await Task.WhenAll(confirmationRequests).ConfigureAwait(false);
 
 			return completedRequests.Where(x => x is not null).Cast<AliceClient>().ToList();
@@ -161,7 +165,7 @@ namespace WalletWasabi.WabiSabi.Client
 			GreedyDecomposer greedyDecomposer = new(allDenominations);
 			var amounts = Coins.Select(c => c.EffectiveValue(feeRate));
 			var denominations = greedyDecomposer.Decompose(amounts.Sum(), feeRate.GetFee(31)); // TODO constant?
-			return amounts;
+			return denominations;
 		}
 
 		private IEnumerable<IEnumerable<(ulong RealAmountCredentialValue, ulong RealVsizeCredentialValue, Money Value)>> CreatePlan(

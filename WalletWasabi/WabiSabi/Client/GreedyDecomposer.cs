@@ -21,9 +21,9 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			var i = 0;
 			var denomination = Denominations[i];
-			while (amount > costPerOutput)
+			while (amount - costPerOutput > Money.Zero)
 			{
-				if (denomination + costPerOutput <= amount)
+				if (denomination <= amount - costPerOutput)
 				{
 					yield return denomination;
 					amount -= denomination + costPerOutput;

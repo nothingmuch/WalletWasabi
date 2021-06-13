@@ -107,7 +107,7 @@ namespace WalletWasabi.WabiSabi.Client
 
 			if (aliceClients.Count() != inputNodes.Count)
 			{
-				throw new InvalidOperationException("Graph vs Alice inputs mismatch");
+				throw new InvalidOperationException($"Graph vs Alice inputs mismatch {aliceClients.Count()} != {inputNodes.Count}");
 			}
 
 			return aliceClients.OrderBy(alice => alice.Coin.Amount).Zip(inputNodes.OrderBy(node => node.Values[(int)CredentialType.Amount]));

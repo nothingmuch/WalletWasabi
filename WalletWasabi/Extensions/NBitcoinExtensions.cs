@@ -3,12 +3,12 @@ using NBitcoin.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using WalletWasabi.Blockchain.Keys;
+using WalletWasabi.Blockchain.TransactionOutputs;
 using WalletWasabi.Blockchain.Transactions;
 using WalletWasabi.Helpers;
 using WalletWasabi.Logging;
@@ -468,6 +468,9 @@ namespace NBitcoin
 			output.Value + feeRate.GetFee(output.ScriptPubKey.EstimateOutputVsize());
 
 		public static Money EffectiveValue(this Coin coin, FeeRate feeRate) =>
+			coin.Amount - feeRate.GetFee(coin.ScriptPubKey.EstimateInputVsize());
+
+		public static Money EffectiveValue(this SmartCoin coin, FeeRate feeRate) =>
 			coin.Amount - feeRate.GetFee(coin.ScriptPubKey.EstimateInputVsize());
 
 		public static T FromBytes<T>(byte[] input) where T : IBitcoinSerializable, new()

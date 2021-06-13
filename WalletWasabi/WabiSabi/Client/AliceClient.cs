@@ -1,11 +1,11 @@
 using NBitcoin;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WalletWasabi.Crypto;
 using WalletWasabi.Crypto.ZeroKnowledge;
-using WalletWasabi.Helpers;
 using WalletWasabi.Logging;
 using WalletWasabi.WabiSabi.Backend.Models;
 
@@ -47,29 +47,35 @@ namespace WalletWasabi.WabiSabi.Client
 			Logger.LogInfo($"Round ({RoundId}), Alice ({AliceId}): Registered an input.");
 		}
 
-		public async Task ConfirmConnectionAsync(TimeSpan connectionConfirmationTimeout, long vsizeAllocationToRequest, CancellationToken cancellationToken)
+		public async Task ConfirmConnectionAsync(TimeSpan connectionConfirmationTimeout, IEnumerable<long> amountsToRequest, IEnumerable<long> vsizesToRequest, long vsizeAllocation, CancellationToken cancellationToken)
 		{
-			while (!await TryConfirmConnectionAsync(vsizeAllocationToRequest, cancellationToken).ConfigureAwait(false))
+			while (!await TryConfirmConnectionAsync(amountsToRequest, vsizesToRequest, vsizeAllocation, cancellationToken).ConfigureAwait(false))
 			{
 				await Task.Delay(connectionConfirmationTimeout / 2, cancellationToken).ConfigureAwait(false);
 			}
 		}
 
-		private async Task<bool> TryConfirmConnectionAsync(long vsizeAllocationToRequest, CancellationToken cancellationToken)
+		private async Task<bool> TryConfirmConnectionAsync(IEnumerable<long> amountsToRequest, IEnumerable<long> vsizesToRequest, long vsizeAllocation, CancellationToken cancellationToken)
 		{
 			var inputVsize = Coin.ScriptPubKey.EstimateInputVsize();
-			var vsizesToRequest = new[] { vsizeAllocationToRequest - inputVsize };
 
 			var totalFeeToPay = FeeRate.GetFee(Coin.ScriptPubKey.EstimateInputVsize());
 			var totalAmount = Coin.Amount;
 			var effectiveAmount = totalAmount - totalFeeToPay;
 
+			if (effectiveAmount.Satoshi != amountsToRequest.Sum())
+			{
+				amountsToRequest = amountsToRequest.Append(effectiveAmount.Satoshi - amountsToRequest.Sum());
+			}
+			if (vsizeAllocation != Coin.ScriptPubKey.EstimateInputVsize() + vsizesToRequest.Sum())
+			{
+				vsizesToRequest = vsizesToRequest.Append(vsizeAllocation - (Coin.ScriptPubKey.EstimateInputVsize() + vsizesToRequest.Sum()));
+			}
+
 			if (effectiveAmount <= Money.Zero)
 			{
 				throw new InvalidOperationException($"Round({ RoundId }), Alice({ AliceId}): Not enough funds to pay for the fees.");
 			}
-
-			var amountsToRequest = new[] { effectiveAmount.Satoshi };
 
 			var response = await ArenaClient
 				.ConfirmConnectionAsync(

@@ -227,8 +227,8 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 			Assert.Equal(Phase.ConnectionConfirmation, round.Phase);
 
 			// Confirm connections.
-			await aliceClient1.ConfirmConnectionAsync(TimeSpan.FromMilliseconds(100), round.MaxVsizeAllocationPerAlice, CancellationToken.None).ConfigureAwait(false);
-			await aliceClient2.ConfirmConnectionAsync(TimeSpan.FromMilliseconds(100), round.MaxVsizeAllocationPerAlice, CancellationToken.None).ConfigureAwait(false);
+			await aliceClient1.ConfirmConnectionAsync(TimeSpan.FromMilliseconds(100), new[] { coin1.EffectiveValue(round.FeeRate).Satoshi }, new[] { round.MaxVsizeAllocationPerAlice - (long)coin1.ScriptPubKey.EstimateInputVsize() }, round.MaxVsizeAllocationPerAlice, CancellationToken.None).ConfigureAwait(false);
+			await aliceClient2.ConfirmConnectionAsync(TimeSpan.FromMilliseconds(100), new[] { coin2.EffectiveValue(round.FeeRate).Satoshi }, new[] { round.MaxVsizeAllocationPerAlice - (long)coin2.ScriptPubKey.EstimateInputVsize() }, round.MaxVsizeAllocationPerAlice, CancellationToken.None).ConfigureAwait(false);
 
 			await arena.TriggerAndWaitRoundAsync(TimeSpan.FromSeconds(21));
 			Assert.Equal(Phase.OutputRegistration, round.Phase);
