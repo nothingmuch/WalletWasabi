@@ -21,7 +21,7 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			var i = 0;
 			var denomination = Denominations[i];
-			while (amount > costPerOutput && i < Denominations.Count)
+			while (amount > costPerOutput && i < Denominations.Count && amount.Satoshi > 10000)
 			{
 				while (amount < denomination + costPerOutput && i < Denominations.Count)
 				{
@@ -34,7 +34,6 @@ namespace WalletWasabi.WabiSabi.Client
 					yield return denomination;
 				}
 			}
-			yield return amount - costPerOutput; // FIXME remove
 		}
 	}
 }

@@ -48,11 +48,11 @@ namespace WalletWasabi.WabiSabi.Client
 			// remainder is non-zero, prepend it so that can it be omitted below.
 			if (remainingAmount != 0)
 			{
-				// amountsToRequest = amountsToRequest.Prepend(remainingAmount);
+				 amountsToRequest = amountsToRequest.Prepend(remainingAmount);
 			}
 			if (remainingVsize != 0)
 			{
-				// vsizesToRequest = vsizesToRequest.Prepend(remainingVsize);
+				 vsizesToRequest = vsizesToRequest.Prepend(remainingVsize);
 			}
 
 			var response = await ArenaClient.ReissueCredentialAsync(

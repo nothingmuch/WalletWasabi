@@ -126,7 +126,7 @@ namespace WalletWasabi.Tests.Helpers
 			mockRpc.OnGetMempoolInfoAsync = () => Task.FromResult(
 				new MemPoolInfo
 				{
-					MemPoolMinFee = 0.00001000, // 1 s/b (default value)
+					MemPoolMinFee = 0.00000000, // 1 s/b (default value)
 					Histogram = Array.Empty<FeeRateGroup>()
 				});
 
@@ -134,7 +134,7 @@ namespace WalletWasabi.Tests.Helpers
 				new EstimateSmartFeeResponse()
 				{
 					Blocks = target,
-					FeeRate = new FeeRate(Money.Satoshis(5000))
+					FeeRate = new FeeRate(Money.Zero) // Satoshis(5000))
 				});
 
 			mockRpc.OnGetTxOutAsync = (_, _, _) => null;
