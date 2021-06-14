@@ -190,7 +190,7 @@ namespace WalletWasabi.WabiSabi.Crypto
 				statements.Add(ProofSystem.BalanceProofStatement(balanceTweak + sumCa - sumMa));
 			}
 
-			var transcript = BuildTransnscript(registrationRequest.IsNullRequest);
+			var transcript = BuildTranscript(registrationRequest.IsNullRequest);
 
 			// Verify all statements.
 			var areProofsValid = ProofSystem.Verify(transcript, statements, registrationRequest.Proofs);
@@ -231,14 +231,14 @@ namespace WalletWasabi.WabiSabi.Crypto
 			return (mac, knowledge);
 		}
 
-		private Transcript BuildTransnscript(bool isNullRequest)
+		private Transcript BuildTranscript(bool isNullRequest)
 		{
 			var label = $"UnifiedRegistration/{NumberOfCredentials}/{isNullRequest}";
 			var encodedLabel = Encoding.UTF8.GetBytes(label);
 			return new Transcript(encodedLabel);
 		}
 
-		private class PreparedCredentialsResponse : ICommitableCredentialsResponse 
+		private class PreparedCredentialsResponse : ICommitableCredentialsResponse
 		{
 			private readonly CredentialIssuer _issuer;
 			private readonly CredentialsResponse _response;

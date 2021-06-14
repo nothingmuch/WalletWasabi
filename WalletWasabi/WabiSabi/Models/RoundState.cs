@@ -40,10 +40,10 @@ namespace WalletWasabi.WabiSabi.Models
 				_ => throw new InvalidOperationException($"{typeof(TState).Name} state was expected but {CoinjoinState.GetType().Name} state was received.")
 			};
 
-		public WabiSabiClient CreateAmountCredentialClient(ZeroCredentialPool zeroAmountCredentialPool, WasabiRandom random) =>
-			new WabiSabiClient(AmountCredentialIssuerParameters, random, (ulong)MaxRegistrableAmount, zeroAmountCredentialPool);
+		public WabiSabiClient CreateAmountCredentialClient(WasabiRandom random) =>
+			new WabiSabiClient(AmountCredentialIssuerParameters, random, (ulong)MaxRegistrableAmount);
 
-		public WabiSabiClient CreateVsizeCredentialClient(ZeroCredentialPool zeroVsizeCredentialPool, WasabiRandom random) =>
-			new WabiSabiClient(VsizeCredentialIssuerParameters, random, (ulong)MaxRegistrableVsize, zeroVsizeCredentialPool);
+		public WabiSabiClient CreateVsizeCredentialClient(WasabiRandom random) =>
+			new WabiSabiClient(VsizeCredentialIssuerParameters, random, (ulong)MaxRegistrableVsize);
 	}
 }

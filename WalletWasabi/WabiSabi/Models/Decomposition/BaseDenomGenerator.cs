@@ -22,10 +22,11 @@ namespace WalletWasabi.WabiSabi.Models.Decomposition
 			var ternary = Multiple(new long[] { 1, 2 }, powersOfThree);
 			var preferredValueSeries = Multiple(new long[] { 1, 2, 5 }, powersOfTen);
 
-			return powersOfTwo
-				.Select(x => Money.Satoshis(x))
-				.Union(ternary)
-				.Union(preferredValueSeries)
+			return// powersOfTwo
+				//.Select(x => Money.Satoshis(x))
+				//.Union(ternary)
+				//.Union(preferredValueSeries)
+				preferredValueSeries
 				.OrderBy(v => v);
 		}
 	}

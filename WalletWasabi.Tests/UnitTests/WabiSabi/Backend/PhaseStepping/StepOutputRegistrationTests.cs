@@ -1,5 +1,6 @@
 using NBitcoin;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -193,7 +194,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 			await arena.StopAsync(CancellationToken.None);
 		}
 
-		private async Task<(Round Round, ArenaClient ArenaClient, (Credential[] AmountCredentials, Credential[] VSizeCredentials)[] Alices)>
+		private async Task<(Round Round, ArenaClient ArenaClient, (IEnumerable<Credential> AmountCredentials, IEnumerable<Credential> VSizeCredentials)[] Alices)>
 			CreateRoundWithTwoConfirmedConnectionsAsync(Arena arena, Key key1, Coin coin1, Key key2, Coin coin2)
 		{
 			// Create the round.
@@ -222,8 +223,8 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Backend.PhaseStepping
 					arenaClient,
 					new[]
 					{
-						(aliceClient1.RealAmountCredentials, aliceClient1.RealVsizeCredentials),
-						(aliceClient2.RealAmountCredentials, aliceClient2.RealVsizeCredentials)
+						(aliceClient1.IssuedAmountCredentials, aliceClient1.IssuedVsizeCredentials),
+						(aliceClient2.IssuedAmountCredentials, aliceClient2.IssuedVsizeCredentials)
 					});
 
 		}

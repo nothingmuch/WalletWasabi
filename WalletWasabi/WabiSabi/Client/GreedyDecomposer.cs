@@ -21,22 +21,20 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			var i = 0;
 			var denomination = Denominations[i];
-			while (amount - costPerOutput > Money.Zero)
+			while (amount > costPerOutput && i < Denominations.Count)
 			{
-				if (denomination <= amount - costPerOutput)
+				while (amount < denomination + costPerOutput && i < Denominations.Count)
 				{
-					yield return denomination;
-					amount -= denomination + costPerOutput;
-				}
-				else if (++i < Denominations.Count)
-				{
+					i++;
 					denomination = Denominations[i];
 				}
-				else
+				while (amount > denomination + costPerOutput)
 				{
-					yield return amount - costPerOutput; // FIXME remove
+					amount -= denomination + costPerOutput;
+					yield return denomination;
 				}
 			}
+			yield return amount - costPerOutput; // FIXME remove
 		}
 	}
 }

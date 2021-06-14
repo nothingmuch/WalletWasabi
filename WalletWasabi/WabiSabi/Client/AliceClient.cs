@@ -1,11 +1,13 @@
 using NBitcoin;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WalletWasabi.Crypto;
 using WalletWasabi.Crypto.ZeroKnowledge;
+using WalletWasabi.Helpers;
 using WalletWasabi.Logging;
 using WalletWasabi.WabiSabi.Backend.Models;
 
@@ -21,8 +23,8 @@ namespace WalletWasabi.WabiSabi.Client
 			Coin = coin;
 			FeeRate = feeRate;
 			BitcoinSecret = bitcoinSecret;
-			RealAmountCredentials = Array.Empty<Credential>();
-			RealVsizeCredentials = Array.Empty<Credential>();
+			IssuedAmountCredentials = Array.Empty<Credential>();
+			IssuedVsizeCredentials = Array.Empty<Credential>();
 		}
 
 		public uint256 AliceId { get; }
@@ -31,8 +33,8 @@ namespace WalletWasabi.WabiSabi.Client
 		public Coin Coin { get; }
 		private FeeRate FeeRate { get; }
 		private BitcoinSecret BitcoinSecret { get; }
-		public Credential[] RealAmountCredentials { get; private set; }
-		public Credential[] RealVsizeCredentials { get; private set; }
+		public IEnumerable<Credential> IssuedAmountCredentials { get; private set; }
+		public IEnumerable<Credential> IssuedVsizeCredentials { get; private set; }
 
 		public async Task RegisterInputAsync(CancellationToken cancellationToken)
 		{
@@ -42,8 +44,8 @@ namespace WalletWasabi.WabiSabi.Client
 			{
 				throw new InvalidOperationException($"Round ({RoundId}), Local Alice ({AliceId}) was computed as {remoteAliceId}");
 			}
-			RealAmountCredentials = response.RealAmountCredentials;
-			RealVsizeCredentials = response.RealVsizeCredentials;
+			IssuedAmountCredentials = response.IssuedAmountCredentials;
+			IssuedVsizeCredentials = response.IssuedVsizeCredentials;
 			Logger.LogInfo($"Round ({RoundId}), Alice ({AliceId}): Registered an input.");
 		}
 
@@ -51,7 +53,8 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			while (!await TryConfirmConnectionAsync(amountsToRequest, vsizesToRequest, vsizeAllocation, cancellationToken).ConfigureAwait(false))
 			{
-				await Task.Delay(connectionConfirmationTimeout / 2, cancellationToken).ConfigureAwait(false);
+				// await Task.Delay(connectionConfirmationTimeout / 2, cancellationToken).ConfigureAwait(false);
+				await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
 			}
 		}
 
@@ -63,37 +66,70 @@ namespace WalletWasabi.WabiSabi.Client
 			var totalAmount = Coin.Amount;
 			var effectiveAmount = totalAmount - totalFeeToPay;
 
-			if (effectiveAmount.Satoshi != amountsToRequest.Sum())
-			{
-				amountsToRequest = amountsToRequest.Append(effectiveAmount.Satoshi - amountsToRequest.Sum());
-			}
-			if (vsizeAllocation != Coin.ScriptPubKey.EstimateInputVsize() + vsizesToRequest.Sum())
-			{
-				vsizesToRequest = vsizesToRequest.Append(vsizeAllocation - (Coin.ScriptPubKey.EstimateInputVsize() + vsizesToRequest.Sum()));
-			}
-
 			if (effectiveAmount <= Money.Zero)
 			{
 				throw new InvalidOperationException($"Round({ RoundId }), Alice({ AliceId}): Not enough funds to pay for the fees.");
 			}
 
+			// At the protocol level the balance proof may require requesting
+			// credentials for any left over amounts.
+			var remainingAmount = effectiveAmount.Satoshi - amountsToRequest.Sum();
+			var remainingVsize = vsizeAllocation - ( Coin.ScriptPubKey.EstimateInputVsize() + vsizesToRequest.Sum() );
+
+			// Since non-zero credential requests have a range proof and any
+			// remainder is non-zero, prepend it so that can it be omitted below.
+			if (remainingAmount != 0)
+			{
+				amountsToRequest = amountsToRequest.Prepend(remainingAmount);
+			}
+			if (remainingVsize != 0)
+			{
+				vsizesToRequest = vsizesToRequest.Prepend(remainingVsize);
+			}
+
+			Debug.Assert(IssuedAmountCredentials.Count() == 2);
+			Debug.Assert(IssuedVsizeCredentials.Count() == 2);
+
 			var response = await ArenaClient
 				.ConfirmConnectionAsync(
 					RoundId,
 					AliceId,
-					amountsToRequest,
-					vsizesToRequest,
-					RealAmountCredentials,
-					RealVsizeCredentials,
+					amountsToRequest.Where(x => x != 0),
+					vsizesToRequest.Where(x => x != 0),
+					IssuedAmountCredentials,
+					IssuedVsizeCredentials,
 					cancellationToken)
 				.ConfigureAwait(false);
 
+			// Always update issued credentials, final request will contain
+			// requested followed by zero credentials, but before confirmation
+			// only zero credentials will be issued.
+			// TODO if there's an extra credential, save it for re-planning
+			// purposes
+			IssuedAmountCredentials = response.IssuedAmountCredentials;
+			IssuedVsizeCredentials = response.IssuedVsizeCredentials;
+
 			var isConfirmed = response.Value;
+
 			if (isConfirmed)
 			{
-				RealAmountCredentials = response.RealAmountCredentials;
-				RealVsizeCredentials = response.RealVsizeCredentials;
+				Debug.Assert(IssuedAmountCredentials.Count() == 4);
+				Debug.Assert(IssuedVsizeCredentials.Count() == 4);
+				if (remainingAmount != 0)
+				{
+					IssuedAmountCredentials = IssuedAmountCredentials.Skip(1);
+				}
+				if (remainingVsize != 0)
+				{
+					IssuedVsizeCredentials = IssuedVsizeCredentials.Skip(1);
+				}
 			}
+			else
+			{
+				Debug.Assert(IssuedAmountCredentials.Count() == 2);
+				Debug.Assert(IssuedVsizeCredentials.Count() == 2);
+			}
+
 			return isConfirmed;
 		}
 

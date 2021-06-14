@@ -1,8 +1,8 @@
 using NBitcoin;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using WalletWasabi.Crypto.ZeroKnowledge;
@@ -19,37 +19,29 @@ namespace WalletWasabi.WabiSabi.Client
 				.SelectMany(type => Enumerable.Concat(Graph.Reissuances, Graph.Outputs)
 				.SelectMany(node => Graph.EdgeSets[type].InEdges(node)));
 
-			DependencyTasks = allInEdges.ToDictionary(edge => edge, _ => new TaskCompletionSource<Credential?>(TaskCreationOptions.RunContinuationsAsynchronously));
+			DependencyTasks = allInEdges.ToDictionary(edge => edge, _ => new TaskCompletionSource<Credential>(TaskCreationOptions.RunContinuationsAsynchronously));
 		}
 
 		private DependencyGraph Graph { get; }
-		private Dictionary<CredentialDependency, TaskCompletionSource<Credential?>> DependencyTasks { get; }
+		private Dictionary<CredentialDependency, TaskCompletionSource<Credential>> DependencyTasks { get; }
 
-		public async Task<List<(Money Amount, Credential[] AmounCreds, Credential[] VsizeCreds)>> ResolveAsync(IEnumerable<AliceClient> aliceClients, BobClient bobClient, CancellationToken cancellationToken)
+		public async Task ResolveAsync(IEnumerable<AliceClient> aliceClients, BobClient bobClient, IEnumerable<TxOut> txOuts, CancellationToken cancellationToken)
 		{
 			var aliceNodePairs = PairAliceClientAndRequestNodes(aliceClients, Graph);
 
-			// Set the result for the inputs.
+			// Set the result for credentials issued from connection confirmation.
 			foreach ((var aliceClient, var node) in aliceNodePairs)
 			{
-				foreach ((var edge, var credential) in Enumerable.Zip(Graph.OutEdges(node, CredentialType.Amount).Where(edge => edge.Value > 0), aliceClient.RealAmountCredentials))
+				Debug.Assert(Graph.OutEdges(node, CredentialType.Amount).Count() <= aliceClient.IssuedAmountCredentials.Count());
+				foreach (var (edge, credential) in Enumerable.Zip(Graph.OutEdges(node, CredentialType.Amount), aliceClient.IssuedAmountCredentials))
 				{
 					DependencyTasks[edge].SetResult(credential);
 				}
 
-				foreach (var edge in Graph.OutEdges(node, CredentialType.Amount).Where(edge => edge.Value == 0))
-				{
-					DependencyTasks[edge].SetResult(null);
-				}
-
-				foreach ((var edge, var credential) in Enumerable.Zip(Graph.OutEdges(node, CredentialType.Vsize).Where(edge => edge.Value > 0), aliceClient.RealVsizeCredentials))
+				Debug.Assert(Graph.OutEdges(node, CredentialType.Vsize).Count() <= aliceClient.IssuedVsizeCredentials.Count());
+				foreach (var (edge, credential) in Enumerable.Zip(Graph.OutEdges(node, CredentialType.Vsize), aliceClient.IssuedVsizeCredentials))
 				{
 					DependencyTasks[edge].SetResult(credential);
-				}
-
-				foreach (var edge in Graph.OutEdges(node, CredentialType.Vsize).Where(edge => edge.Value == 0))
-				{
-					DependencyTasks[edge].SetResult(null);
 				}
 			}
 
@@ -61,6 +53,8 @@ namespace WalletWasabi.WabiSabi.Client
 			{
 				var inputAmountEdgeTasks = Graph.InEdges(node, CredentialType.Amount).Select(edge => DependencyTasks[edge].Task);
 				var inputVsizeEdgeTasks = Graph.InEdges(node, CredentialType.Vsize).Select(edge => DependencyTasks[edge].Task);
+
+				// Debug.Assert(Enumerable.Concat(inputAmountEdgeTasks, inputVsizeEdgeTasks).All(t => t.Status == TaskStatus.RanToCompletion));
 
 				var outputAmountEdgeTaskCompSources = Graph.OutEdges(node, CredentialType.Amount).Select(edge => DependencyTasks[edge]);
 				var outputVsizeEdgeTaskCompSources = Graph.OutEdges(node, CredentialType.Vsize).Select(edge => DependencyTasks[edge]);
@@ -74,31 +68,41 @@ namespace WalletWasabi.WabiSabi.Client
 					outputAmountEdgeTaskCompSources,
 					outputVsizeEdgeTaskCompSources);
 
-				var task = smartRequestNode.StartAsync(bobClient, requestedAmounts, requestedVSizes, cancellationToken);
+				var task = smartRequestNode.StartReissueAsync(bobClient, requestedAmounts, requestedVSizes, cancellationToken);
 				alltask.Add(task);
 			}
+
+			await Task.Delay(5000, cancellationToken);
+			// Debug.Assert(alltask.All(t => t.Status == TaskStatus.RanToCompletion));
+
 			await Task.WhenAll(alltask).ConfigureAwait(false);
 
-			var amountEdges = Graph.Outputs.SelectMany(node => Graph.InEdges(node, CredentialType.Amount));
-			var vsizeEdges = Graph.Outputs.SelectMany(node => Graph.InEdges(node, CredentialType.Vsize));
+			alltask = new();
 
-			// Check if all tasks were finished, otherwise Task.Result will block.
-			if (!amountEdges.Concat(vsizeEdges).All(edge => DependencyTasks[edge].Task.IsCompletedSuccessfully))
+			foreach (var (txOut, node) in Enumerable.Zip(txOuts, Graph.Outputs))
 			{
-				throw new InvalidOperationException("");
+				var inputAmountEdgeTasks = Graph.InEdges(node, CredentialType.Amount).Select(edge => DependencyTasks[edge].Task);
+				var inputVsizeEdgeTasks = Graph.InEdges(node, CredentialType.Vsize).Select(edge => DependencyTasks[edge].Task);
+
+				Debug.Assert(!Graph.OutEdges(node, CredentialType.Amount).Any());
+				Debug.Assert(!Graph.OutEdges(node, CredentialType.Vsize).Any());
+
+				SmartRequestNode smartRequestNode = new(
+					inputAmountEdgeTasks,
+					inputVsizeEdgeTasks,
+					Array.Empty<TaskCompletionSource<Credential>>(),
+					Array.Empty<TaskCompletionSource<Credential>>());
+
+				var task = smartRequestNode.StartRegisterOutputAsync(bobClient, txOut, cancellationToken);
+				alltask.Add(task);
 			}
 
-			var amountCreds = amountEdges.Select(edge => DependencyTasks[edge].Task.Result).Where(cred => cred != null);
-			var vsizeCreds = vsizeEdges.Select(edge => DependencyTasks[edge].Task.Result).Where(cred => cred != null);
+			await Task.Delay(5000, cancellationToken);
+			// Debug.Assert(alltask.All(t => t.Status == TaskStatus.RanToCompletion));
 
-			List<(Money, Credential[], Credential[])> outputs = new();
+			await Task.WhenAll(alltask).ConfigureAwait(false);
 
-			foreach (var (amountCred, vsizeCred) in amountCreds.Zip(vsizeCreds))
-			{
-				outputs.Add((amountCred.Amount.ToMoney(), new[] { amountCred }, new[] { vsizeCred }));
-			}
-
-			return outputs;
+			Debug.Assert(false, "finished outputregistrations");
 		}
 
 		private IEnumerable<(AliceClient AliceClient, RequestNode Node)> PairAliceClientAndRequestNodes(IEnumerable<AliceClient> aliceClients, DependencyGraph graph)
@@ -110,7 +114,7 @@ namespace WalletWasabi.WabiSabi.Client
 				throw new InvalidOperationException($"Graph vs Alice inputs mismatch {aliceClients.Count()} != {inputNodes.Count}");
 			}
 
-			return aliceClients.OrderBy(alice => alice.Coin.Amount).Zip(inputNodes.OrderBy(node => node.Values[(int)CredentialType.Amount]));
+			return aliceClients.Zip(inputNodes);
 		}
 	}
 }

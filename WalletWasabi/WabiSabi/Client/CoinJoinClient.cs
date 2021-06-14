@@ -1,7 +1,8 @@
-using Microsoft.Extensions.Hosting;
 using NBitcoin;
 using System;
+using System.IO;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,14 +13,56 @@ using WalletWasabi.Logging;
 using WalletWasabi.WabiSabi.Backend.PostRequests;
 using WalletWasabi.WabiSabi.Backend.Rounds;
 using WalletWasabi.WabiSabi.Client.CredentialDependencies;
-using WalletWasabi.WabiSabi.Crypto;
 using WalletWasabi.WabiSabi.Models;
 using WalletWasabi.WabiSabi.Models.Decomposition;
 using WalletWasabi.WabiSabi.Models.MultipartyTransaction;
 using WalletWasabi.Wallets;
+using System.Collections.Immutable;
 
 namespace WalletWasabi.WabiSabi.Client
 {
+	public static class DependencyGraphExtensions
+	{
+		/// <summary>Format the graph in graphviz dot format, suitable for
+		/// reading or viewing.</summary>
+		public static string Graphviz(this DependencyGraph g)
+		{
+			var output = "digraph {\n";
+
+			Func<RequestNode, int> id = g.Vertices.IndexOf;
+
+			foreach (var v in g.Vertices)
+			{
+				if (v.InitialBalance(CredentialType.Amount) == 0 && v.InitialBalance(CredentialType.Vsize) == 0)
+				{
+					output += $"  {id(v)} [label=\"\"];\n";
+				}
+				else
+				{
+					output += $"  {id(v)} [label=\"{v.InitialBalance(CredentialType.Amount)}s {v.InitialBalance(CredentialType.Vsize)}b\"];\n";
+				}
+			}
+
+			foreach (var credentialType in DependencyGraph.CredentialTypes)
+			{
+				var color = credentialType == 0 ? "blue" : "red";
+				var unit = credentialType == 0 ? "s" : "b";
+
+				output += "  {\n";
+				output += $"    edge [color={color}, fontcolor={color}];\n";
+
+				foreach (var e in g.EdgeSets[credentialType].Predecessors.Values.Aggregate((a, b) => a.Union(b)).OrderByDescending(e => e.Value).ThenBy(e => id(e.From)).ThenBy(e => id(e.To)))
+				{
+					output += $"    {id(e.From)} -> {id(e.To)} [label=\"{e.Value}{unit}\"{(e.Value == 0 ? ", style=dashed" : "")}];\n";
+				}
+
+				output += "  }\n";
+			}
+
+			output += "}\n";
+			return output;
+		}
+	}
 	public class CoinJoinClient
 	{
 		public CoinJoinClient(
@@ -37,8 +80,6 @@ namespace WalletWasabi.WabiSabi.Client
 			Coins = coins;
 		}
 
-		private ZeroCredentialPool ZeroAmountCredentialPool { get; } = new();
-		private ZeroCredentialPool ZeroVsizeCredentialPool { get; } = new();
 		private IEnumerable<Coin> Coins { get; set; }
 		private SecureRandom SecureRandom { get; } = new SecureRandom();
 		private Random Random { get; } = new();
@@ -53,33 +94,37 @@ namespace WalletWasabi.WabiSabi.Client
 			var constructionState = roundState.Assert<ConstructionState>();
 
 			// Calculate outputs values
-			var outputValues = DecomposeAmounts(roundState.FeeRate);
+			var outputValues = DecomposeAmounts(roundState.FeeRate).ToImmutableArray();
 
 			// Get all locked internal keys we have and assert we have enough.
-			Keymanager.AssertLockedInternalKeysIndexed(howMany: Coins.Count());
+			Keymanager.AssertLockedInternalKeysIndexed(howMany: outputValues.Length);
 			var allLockedInternalKeys = Keymanager.GetKeys(x => x.IsInternal && x.KeyState == KeyState.Locked);
-			var outputTxOuts = outputValues.Zip(allLockedInternalKeys, (amount, hdPubKey) => new TxOut(amount, hdPubKey.P2wpkhScript));
+			var txOuts = outputValues.Zip(allLockedInternalKeys, (amount, hdPubKey) => new TxOut(amount, hdPubKey.P2wpkhScript));
 
 			List<AliceClient> aliceClients = CreateAliceClients(roundState);
 
-			DependencyGraph dependencyGraph = DependencyGraph.ResolveCredentialDependencies(aliceClients.Select(a => a.Coin), outputTxOuts, roundState.FeeRate, roundState.MaxVsizeAllocationPerAlice);
+			DependencyGraph dependencyGraph = DependencyGraph.ResolveCredentialDependencies(aliceClients.Select(a => a.Coin), txOuts, roundState.FeeRate, roundState.MaxVsizeAllocationPerAlice);
+
+			File.WriteAllText($"/tmp/graphs/{string.Join("_", Coins.Select(x =>x.Amount))}_to_{string.Join("_", txOuts.Select(x => x.Value)) }_at_{roundState.FeeRate.GetFee(1)}.dot", dependencyGraph.Graphviz());
 
 			// Register coins.
-			aliceClients = await RegisterCoinsAsync(aliceClients, cancellationToken).ConfigureAwait(false);
+			var remainingAliceClients = await RegisterCoinsAsync(aliceClients, cancellationToken).ConfigureAwait(false);
+			aliceClients = remainingAliceClients;
 
 			// Confirm coins.
-			var amountsToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Amount).Select(e => (long)e.Value).Where(x => x != 0));
-			var vsizesToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Vsize).Select(e => (long)e.Value).Where(x => x != 0));
-			aliceClients = await ConfirmConnectionsAsync(aliceClients, amountsToRequest, vsizesToRequest, roundState.MaxVsizeAllocationPerAlice, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
+			var amountsToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Amount).Select(e => (long)e.Value));
+			var vsizesToRequest = dependencyGraph.Inputs.Select(v => dependencyGraph.OutEdges(v, CredentialType.Vsize).Select(e => (long)e.Value));
+			remainingAliceClients = await ConfirmConnectionsAsync(aliceClients, amountsToRequest, vsizesToRequest, roundState.MaxVsizeAllocationPerAlice, roundState.ConnectionConfirmationTimeout, cancellationToken).ConfigureAwait(false);
 
-			// Re-issuances.
+			Debug.Assert(remainingAliceClients.Count == aliceClients.Count);
+			aliceClients = remainingAliceClients;
+
+			roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState.Id, rs => rs.Phase == Phase.OutputRegistration, cancellationToken).ConfigureAwait(false);
+
+			// Re-issuances and output registration.
 			DependencyGraphResolver dgr = new(dependencyGraph);
 			var bobClient = CreateBobClient(roundState);
-			var outputCredentials = await dgr.ResolveAsync(aliceClients, bobClient, cancellationToken).ConfigureAwait(false);
-
-			// Output registration.
-			roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState.Id, rs => rs.Phase == Phase.OutputRegistration, cancellationToken).ConfigureAwait(false);
-			await RegisterOutputsAsync(bobClient, outputTxOuts, outputCredentials, cancellationToken).ConfigureAwait(false);
+			await dgr.ResolveAsync(aliceClients, bobClient, txOuts, cancellationToken).ConfigureAwait(false);
 
 			// Signing.
 			roundState = await RoundStatusUpdater.CreateRoundAwaiter(roundState.Id, rs => rs.Phase == Phase.TransactionSigning, cancellationToken).ConfigureAwait(false);
@@ -87,7 +132,7 @@ namespace WalletWasabi.WabiSabi.Client
 			var unsignedCoinJoin = signingState.CreateUnsignedTransaction();
 
 			// Sanity check.
-			var effectiveOutputs = outputTxOuts.Select(o => (o.EffectiveCost(roundState.FeeRate), o.ScriptPubKey));
+			var effectiveOutputs = txOuts.Select(o => (o.EffectiveCost(roundState.FeeRate), o.ScriptPubKey));
 			if (!SanityCheck(effectiveOutputs, unsignedCoinJoin))
 			{
 				throw new InvalidOperationException($"Round ({roundState.Id}): My output is missing.");
@@ -103,8 +148,8 @@ namespace WalletWasabi.WabiSabi.Client
 			foreach (var coin in Coins)
 			{
 				var aliceArenaClient = new ArenaClient(
-					roundState.CreateAmountCredentialClient(ZeroAmountCredentialPool, SecureRandom),
-					roundState.CreateVsizeCredentialClient(ZeroVsizeCredentialPool, SecureRandom),
+					roundState.CreateAmountCredentialClient(SecureRandom),
+					roundState.CreateVsizeCredentialClient(SecureRandom),
 					ArenaRequestHandler);
 
 				var hdKey = Keymanager.GetSecrets(Kitchen.SaltSoup(), coin.ScriptPubKey).Single();
@@ -118,16 +163,16 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			async Task<AliceClient?> RegisterInputTask(AliceClient aliceClient)
 			{
-				try
-				{
+				// try
+				// {
 					await aliceClient.RegisterInputAsync(cancellationToken).ConfigureAwait(false);
 					return aliceClient;
-				}
-				catch (Exception e)
-				{
-					Logger.LogWarning($"Round ({aliceClient.RoundId}), Alice ({aliceClient.AliceId}): {nameof(AliceClient.RegisterInputAsync)} failed, reason:'{e}'.");
-					return default;
-				}
+				// }
+				// catch (Exception e)
+				// {
+				// 	Logger.LogWarning($"Round ({aliceClient.RoundId}), Alice ({aliceClient.AliceId}): {nameof(AliceClient.RegisterInputAsync)} failed, reason:'{e}'.");
+				// 	return default;
+				// }
 			}
 
 			var registerRequests = aliceClients.Select(RegisterInputTask);
@@ -140,17 +185,17 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			async Task<AliceClient?> ConfirmConnectionTask(AliceClient aliceClient, IEnumerable<long> amountsToRequest, IEnumerable<long> vsizesToRequest)
 			{
-				try
-				{
+				// try
+				// {
 					await aliceClient.ConfirmConnectionAsync(connectionConfirmationTimeout, amountsToRequest, vsizesToRequest, vsizeAllocation, cancellationToken).ConfigureAwait(false);
 					return aliceClient;
-				}
-				catch (Exception e)
-				{
-					Logger.LogWarning($"Round ({aliceClient.RoundId}), Alice ({aliceClient.AliceId}): {nameof(AliceClient.ConfirmConnectionAsync)} failed, reason:'{e}'.");
-					throw e;
-					return default;
-				}
+				// }
+				// catch (Exception e)
+				// {
+				// 	Logger.LogWarning($"Round ({aliceClient.RoundId}), Alice ({aliceClient.AliceId}): {nameof(AliceClient.ConfirmConnectionAsync)} failed, reason:'{e}'.");
+				// 	throw e;
+				// 	return default;
+				// }
 			}
 
 			var confirmationRequests = aliceClients.Zip(amountsToRequest, vsizesToRequest, ConfirmConnectionTask);
@@ -164,8 +209,7 @@ namespace WalletWasabi.WabiSabi.Client
 			var allDenominations = BaseDenominationGenerator.Generate();
 			GreedyDecomposer greedyDecomposer = new(allDenominations);
 			var amounts = Coins.Select(c => c.EffectiveValue(feeRate));
-			var denominations = greedyDecomposer.Decompose(amounts.Sum(), feeRate.GetFee(31)); // TODO constant?
-			return denominations;
+			return greedyDecomposer.Decompose(amounts.Sum(), feeRate.GetFee(31)); // TODO constant?
 		}
 
 		private IEnumerable<IEnumerable<(ulong RealAmountCredentialValue, ulong RealVsizeCredentialValue, Money Value)>> CreatePlan(
@@ -183,16 +227,16 @@ namespace WalletWasabi.WabiSabi.Client
 		{
 			async Task<TxOut?> RegisterOutputTask(BobClient bobClient, TxOut output, Credential[] realAmountCredentials, Credential[] realVsizeCredentials)
 			{
-				try
-				{
+				// try
+				// {
 					await bobClient.RegisterOutputAsync(output.Value, output.ScriptPubKey, realAmountCredentials, realVsizeCredentials, cancellationToken).ConfigureAwait(false);
 					return output;
-				}
-				catch (Exception e)
-				{
-					Logger.LogWarning($"Round ({bobClient.RoundId}), Bob ({{output.ScriptPubKey}}): {nameof(BobClient.RegisterOutputAsync)} failed, reason:'{e}'.");
-					return default;
-				}
+				// }
+				// catch (Exception e)
+				// {
+				// 	Logger.LogWarning($"Round ({bobClient.RoundId}), Bob ({{output.ScriptPubKey}}): {nameof(BobClient.RegisterOutputAsync)} failed, reason:'{e}'.");
+				// 	return default;
+				// }
 			}
 
 			List<(TxOut Output, Credential[] RealAmountCredentials, Credential[] RealVsizeCredentials)> outputWithCredentials = new();
@@ -217,8 +261,8 @@ namespace WalletWasabi.WabiSabi.Client
 			return new BobClient(
 				roundState.Id,
 				new(
-					roundState.CreateAmountCredentialClient(ZeroAmountCredentialPool, SecureRandom),
-					roundState.CreateVsizeCredentialClient(ZeroVsizeCredentialPool, SecureRandom),
+					roundState.CreateAmountCredentialClient(SecureRandom),
+					roundState.CreateVsizeCredentialClient(SecureRandom),
 					ArenaRequestHandler));
 		}
 

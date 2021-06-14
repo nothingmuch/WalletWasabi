@@ -1,6 +1,6 @@
 using NBitcoin;
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WalletWasabi.Crypto.ZeroKnowledge;
@@ -18,37 +18,53 @@ namespace WalletWasabi.WabiSabi.Client
 		public uint256 RoundId { get; }
 		private ArenaClient ArenaClient { get; }
 
-		public async Task RegisterOutputAsync(Money amount, Script scriptPubKey, IEnumerable<Credential> amountCredential, IEnumerable<Credential> vsizeCredential, CancellationToken cancellationToken)
-		{
-			// TODO: what to do with the credentials returned?
-			var response = await ArenaClient.RegisterOutputAsync(
+		public async Task RegisterOutputAsync(
+			Money amount,
+			Script scriptPubKey,
+			IEnumerable<Credential> amountCredentialsTooPresent,
+			IEnumerable<Credential> vsizeCredentialsToPresent,
+			CancellationToken cancellationToken)
+			=> await ArenaClient.RegisterOutputAsync(
 				RoundId,
 				amount.Satoshi,
 				scriptPubKey,
-				amountCredential,
-				vsizeCredential,
+				amountCredentialsTooPresent,
+				vsizeCredentialsToPresent,
 				cancellationToken).ConfigureAwait(false);
-		}
 
-		public async Task<(Credential[] RealAmountCredentials, Credential[] RealVsizeCredentials)> ReissueCredentialsAsync(
-			long amount1,
-			long amount2,
-			long vsize1,
-			long vsize2,
-			IEnumerable<Credential> amountCredential,
-			IEnumerable<Credential> vsizeCredential,
+		public async Task<(IEnumerable<Credential> IssuedAmountCredentials, IEnumerable<Credential> IssuedVsizeCredentials)> ReissueCredentialsAsync(
+			IEnumerable<long> amountsToRequest,
+			IEnumerable<long> vsizesToRequest,
+			IEnumerable<Credential> amountCredentialsToPresent,
+			IEnumerable<Credential> vsizeCredentialsToPresent,
 			CancellationToken cancellationToken)
 		{
+			// At the protocol level the balance proof may require requesting
+			// credentials for any left over amounts.
+			var remainingAmount = amountCredentialsToPresent.Sum(x => (long)x.Amount.ToUlong()) - amountsToRequest.Sum();
+			var remainingVsize = vsizeCredentialsToPresent.Sum(x => (long)x.Amount.ToUlong()) - vsizesToRequest.Sum();
+
+			// Since non-zero credential requests have a range proof and any
+			// remainder is non-zero, prepend it so that can it be omitted below.
+			if (remainingAmount != 0)
+			{
+				// amountsToRequest = amountsToRequest.Prepend(remainingAmount);
+			}
+			if (remainingVsize != 0)
+			{
+				// vsizesToRequest = vsizesToRequest.Prepend(remainingVsize);
+			}
+
 			var response = await ArenaClient.ReissueCredentialAsync(
 				RoundId,
-				new[] { amount1, amount2 },
-				new[] { vsize1,	vsize2 },
-				amountCredential,
-				vsizeCredential,
+				amountsToRequest,
+				vsizesToRequest,
+				amountCredentialsToPresent,
+				vsizeCredentialsToPresent,
 				cancellationToken)
 				.ConfigureAwait(false);
 
-			return (response.RealAmountCredentials, response.RealVsizeCredentials);
+			return (response.IssuedAmountCredentials.Skip(remainingAmount == 0 ? 0 : 1), response.IssuedVsizeCredentials.Skip(remainingVsize == 0 ? 0 : 1));
 		}
 	}
 }

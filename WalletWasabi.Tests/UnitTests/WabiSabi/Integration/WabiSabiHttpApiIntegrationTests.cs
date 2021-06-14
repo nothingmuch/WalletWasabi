@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -48,6 +49,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Integration
 		}
 
 		[Theory]
+		[InlineData(new long[] { 100_000_000 })]
 		[InlineData(new long[] { 20_000_000, 40_000_000, 60_000_000, 80_000_000 })]
 		[InlineData(new long[] { 10_000_000, 20_000_000, 30_000_000, 40_000_000, 100_000_000 })]
 		[InlineData(new long[] { 100_000_000, 10_000_000, 10_000 })]
@@ -59,7 +61,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Integration
 			var transactionCompleted = new TaskCompletionSource<Transaction>();
 
 			// Total test timeout.
-			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+			using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 			cts.Token.Register(() => transactionCompleted.TrySetCanceled(), useSynchronizationContext: false);
 
 			// Create a key manager and use it to create two fake coins.
@@ -108,7 +110,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Integration
 			// Create the coinjoin client
 			var apiClient = _apiApplicationFactory.CreateWabiSabiHttpApiClient(httpClient);
 			using var roundStateUpdater = new RoundStateUpdater(TimeSpan.FromSeconds(1), apiClient);
-			await roundStateUpdater.StartAsync(CancellationToken.None);
+			await roundStateUpdater.StartAsync(cts.Token);
 
 			var kitchen = new Kitchen();
 			kitchen.Cook("");
@@ -117,6 +119,8 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Integration
 
 			// Run the coinjoin client task.
 			await coinJoinClient.StartCoinJoinAsync(cts.Token);
+
+			Debug.Assert(false, "should make it this far");
 
 			var boadcastedTx = await transactionCompleted.Task.ConfigureAwait(false); // wait for the transaction to be broadcasted.
 			Assert.NotNull(boadcastedTx);

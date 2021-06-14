@@ -36,20 +36,17 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 			using Arena arena = await WabiSabiFactory.CreateAndStartArenaAsync(config, mockRpc, round);
 			await arena.TriggerAndWaitRoundAsync(TimeSpan.FromMinutes(1));
 
-			ZeroCredentialPool zeroAmountCredential = new();
-			ZeroCredentialPool zeroVsizeCredential = new();
-
 			await using var coordinator = new ArenaRequestHandler(config, new Prison(), arena, mockRpc.Object);
 			var insecureRandom = new InsecureRandom();
 			var wabiSabiApi = new WabiSabiController(coordinator);
 			var roundState = RoundState.FromRound(round);
 			var aliceArenaClient = new ArenaClient(
-				roundState.CreateAmountCredentialClient(zeroAmountCredential, insecureRandom),
-				roundState.CreateVsizeCredentialClient(zeroVsizeCredential, insecureRandom),
+				roundState.CreateAmountCredentialClient(insecureRandom),
+				roundState.CreateVsizeCredentialClient(insecureRandom),
 				wabiSabiApi);
 			var bobArenaClient = new ArenaClient(
-				roundState.CreateAmountCredentialClient(zeroAmountCredential, insecureRandom),
-				roundState.CreateVsizeCredentialClient(zeroVsizeCredential, insecureRandom),
+				roundState.CreateAmountCredentialClient(insecureRandom),
+				roundState.CreateVsizeCredentialClient(insecureRandom),
 				wabiSabiApi);
 			Assert.Equal(Phase.InputRegistration, round.Phase);
 
@@ -72,7 +69,7 @@ namespace WalletWasabi.Tests.UnitTests.WabiSabi.Client
 
 			var bobClient = new BobClient(round.Id, bobArenaClient);
 
-			await bobClient.RegisterOutputAsync(Money.Coins(0.25m), destination, aliceClient.RealAmountCredentials, aliceClient.RealVsizeCredentials, CancellationToken.None);
+			await bobClient.RegisterOutputAsync(Money.Coins(0.25m), destination, aliceClient.IssuedAmountCredentials, aliceClient.IssuedVsizeCredentials, CancellationToken.None);
 
 			var bob = Assert.Single(round.Bobs);
 			Assert.Equal(destination, bob.Script);

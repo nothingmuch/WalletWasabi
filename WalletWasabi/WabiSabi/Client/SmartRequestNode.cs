@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using NBitcoin;
 using WalletWasabi.Crypto.ZeroKnowledge;
+using WalletWasabi.Helpers;
 
 namespace WalletWasabi.WabiSabi.Client
 {
@@ -16,10 +18,10 @@ namespace WalletWasabi.WabiSabi.Client
 			IEnumerable<TaskCompletionSource<Credential>> outputAmountCredentialTasks,
 			IEnumerable<TaskCompletionSource<Credential>> outputVsizeCredentialTasks)
 		{
-			InputAmountCredentialTasks = inputAmountCredentialTasks;
-			InputVsizeCredentialTasks = inputVsizeCredentialTasks;
-			OutputAmountCredentialTasks = outputAmountCredentialTasks;
-			OutputVsizeCredentialTasks = outputVsizeCredentialTasks;
+			InputAmountCredentialTasks = Guard.InRange(nameof(inputAmountCredentialTasks), inputAmountCredentialTasks, 2, 2);
+			InputVsizeCredentialTasks = Guard.InRange(nameof(inputVsizeCredentialTasks), inputVsizeCredentialTasks, 2, 2);
+			OutputAmountCredentialTasks = Guard.InRange(nameof(outputAmountCredentialTasks), outputAmountCredentialTasks, 0, 4);
+			OutputVsizeCredentialTasks = Guard.InRange(nameof(outputVsizeCredentialTasks), outputVsizeCredentialTasks, 0, 4);
 		}
 
 		public IEnumerable<Task<Credential>> InputAmountCredentialTasks { get; }
@@ -27,31 +29,47 @@ namespace WalletWasabi.WabiSabi.Client
 		public IEnumerable<TaskCompletionSource<Credential>> OutputAmountCredentialTasks { get; }
 		public IEnumerable<TaskCompletionSource<Credential>> OutputVsizeCredentialTasks { get; }
 
-		public async Task StartAsync(BobClient bobClient, IEnumerable<long> amounts, IEnumerable<long> vsizes, CancellationToken cancellationToken)
+		public async Task StartReissueAsync(BobClient bobClient, IEnumerable<long> amountsToRequest, IEnumerable<long> vsizesToRequest, CancellationToken cancellationToken)
 		{
 			await Task.WhenAll(InputAmountCredentialTasks.Concat(InputVsizeCredentialTasks)).ConfigureAwait(false);
 
-			IEnumerable<Credential> inputAmountCredentials = InputAmountCredentialTasks.Select(x => x.Result);
-			IEnumerable<Credential> inputVsizeCredentials = InputVsizeCredentialTasks.Select(x => x.Result);
+			IEnumerable<Credential> amountCredentialsToPresent = InputAmountCredentialTasks.Select(x => x.Result);
+			IEnumerable<Credential> vsizeCredentialsToPresent = InputVsizeCredentialTasks.Select(x => x.Result);
 
-			(Credential[] RealAmountCredentials, Credential[] RealVsizeCredentials) result = await bobClient.ReissueCredentialsAsync(
-							amounts.First(),
-							amounts.Last(),
-							vsizes.First(),
-							vsizes.Last(),
-							inputAmountCredentials,
-							inputVsizeCredentials,
-							cancellationToken).ConfigureAwait(false);
+			(IEnumerable<Credential> issuedAmountCredentials, IEnumerable<Credential> issuedVsizeCredentials) = await bobClient.ReissueCredentialsAsync(
+				amountsToRequest,
+				vsizesToRequest,
+				amountCredentialsToPresent,
+				vsizeCredentialsToPresent,
+				cancellationToken).ConfigureAwait(false);
 
-			foreach ((TaskCompletionSource<Credential> tcs, Credential credential) in OutputAmountCredentialTasks.Zip(result.RealAmountCredentials))
+			foreach ((TaskCompletionSource<Credential> tcs, Credential credential) in OutputAmountCredentialTasks.Zip(issuedAmountCredentials))
 			{
 				tcs.SetResult(credential);
 			}
 
-			foreach ((TaskCompletionSource<Credential> tcs, Credential credential) in OutputVsizeCredentialTasks.Zip(result.RealVsizeCredentials))
+			foreach ((TaskCompletionSource<Credential> tcs, Credential credential) in OutputVsizeCredentialTasks.Zip(issuedVsizeCredentials))
 			{
 				tcs.SetResult(credential);
 			}
+		}
+
+		public async Task StartRegisterOutputAsync(BobClient bobClient, TxOut txOut, CancellationToken cancellationToken)
+		{
+			await Task.Delay(3000, cancellationToken);
+			throw new NotImplementedException(string.Join(" ", InputAmountCredentialTasks.Concat(InputVsizeCredentialTasks).Select(t => t.Status)));
+			await Task.WhenAll(InputAmountCredentialTasks.Concat(InputVsizeCredentialTasks)).ConfigureAwait(false);
+			Debug.Assert(false, "should AB");
+
+			IEnumerable<Credential> amountCredentialsToPresent = InputAmountCredentialTasks.Select(x => x.Result);
+			IEnumerable<Credential> vsizeCredentialsToPresent = InputVsizeCredentialTasks.Select(x => x.Result);
+
+			await bobClient.RegisterOutputAsync(
+				txOut.Value,
+				txOut.ScriptPubKey,
+				amountCredentialsToPresent,
+				vsizeCredentialsToPresent,
+				cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

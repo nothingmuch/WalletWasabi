@@ -124,8 +124,8 @@ namespace WalletWasabi.Tests.Helpers
 			var roundState = RoundState.FromRound(arena.Rounds.First());
 			var random = new InsecureRandom();
 			return new ArenaClient(
-				roundState.CreateAmountCredentialClient(new ZeroCredentialPool(), random),
-				roundState.CreateVsizeCredentialClient(new ZeroCredentialPool(), random),
+				roundState.CreateAmountCredentialClient(random),
+				roundState.CreateVsizeCredentialClient(random),
 				new ArenaRequestHandlerAdapter(arena));
 		}
 
@@ -151,14 +151,12 @@ namespace WalletWasabi.Tests.Helpers
 			var amountClient = new WabiSabiClient(
 				amountIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters(),
 				rnd,
-				amountIssuer.MaxAmount,
-				new ZeroCredentialPool());
+				amountIssuer.MaxAmount);
 
 			var vsizeClient = new WabiSabiClient(
 				vsizeIssuer.CredentialIssuerSecretKey.ComputeCredentialIssuerParameters(),
 				rnd,
-				vsizeIssuer.MaxAmount,
-				new ZeroCredentialPool());
+				vsizeIssuer.MaxAmount);
 
 			EnsureZeroCredentials(amountClient, vsizeClient, amountIssuer, vsizeIssuer);
 
