@@ -60,6 +60,12 @@ namespace WalletWasabi.WabiSabi.Client
 			var allLockedInternalKeys = Keymanager.GetKeys(x => x.IsInternal && x.KeyState == KeyState.Locked);
 			var outputTxOuts = outputValues.Zip(allLockedInternalKeys, (amount, hdPubKey) => new TxOut(amount, hdPubKey.P2wpkhScript));
 
+			// TODO remove
+			var mutableTxOuts = outputTxOuts.ToArray();
+			var missing = Coins.Sum(c => c.EffectiveValue(roundState.FeeRate)) - outputTxOuts.Sum(o => o.EffectiveCost(roundState.FeeRate));
+			mutableTxOuts[0].Value += missing;
+			outputTxOuts = mutableTxOuts;
+
 			DependencyGraph dependencyGraph = DependencyGraph.ResolveCredentialDependencies(Coins, outputTxOuts, roundState.FeeRate, roundState.MaxVsizeAllocationPerAlice);
 
 			List<AliceClient> aliceClients = CreateAliceClients(roundState);
